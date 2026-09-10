@@ -1,18 +1,18 @@
 # TTE — حالة المشروع
 
 ## الحالة الحالية
-- المرحلة: Core + Security + Market + Paper Execution foundation
+- المرحلة: Core + Security + Health + Market + Paper Execution foundation
 - الفرع: `foundation-v1`
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
 - أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
-- آخر دفعة: إضافة Secret Store مشفّر + masking + fingerprint واختبارات عدم كشف الأسرار
+- آخر دفعة: إضافة liveness/readiness آمنة مع اختبارات عدم تسريب تفاصيل الأخطاء
 
 ## لوحة المتابعة
 | المجال | الحالة |
 |---|---:|
-| الأساس البرمجي | 48% |
-| الأمان وإدارة الأسرار | 60% |
+| الأساس البرمجي | 52% |
+| الأمان وإدارة الأسرار | 62% |
 | لوحة التحكم RTL | 10% |
 | المحافظ والمنصات | 0% |
 | محرك السوق | 15% |
@@ -22,10 +22,10 @@
 | Paper Trading | 25% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
-| الاختبارات | 40% |
-| التوثيق | 18% |
+| الاختبارات | 44% |
+| التوثيق | 20% |
 
-**التقدم الإجمالي التقريبي: 29%**
+**التقدم الإجمالي التقريبي: 31%**
 
 > النسبة مؤشر سير عمل وليست نسبة ضمان نجاح أو ربح.
 
@@ -37,14 +37,15 @@
 - نموذج Audit Event غير قابل للتعديل لتسجيل الأحداث الأمنية دون وضع الأسرار داخل السجل.
 - سياسات HTTP: Secure/HttpOnly/SameSite cookies، CSRF tokens عشوائية ومقارنة constant-time، وIP allowlist صريح.
 - Secret Store أولي بتشفير Fernet، اشتقاق مفتاح من master key، masking، وبصمة أحادية الاتجاه، مع اختبارات رفض المفتاح الخاطئ وعدم كشف plaintext في ciphertext.
-- CI يثبت المشروع واعتمادياته ثم compile + pytest.
+- Health Checker يفصل liveness عن readiness، ويمنع تسريب نص الاستثناءات الحساسة من تقارير الصحة.
+- CI يثبت المشروع واعتمادياته ثم compile + pytest؛ آخر تشغيل مكتمل ناجح.
 - Live Trading ما زال مقفولاً افتراضياً ولا يمكن فتحه من هذه الطبقة الأساسية.
 
 ## بوابة الإطلاق
 لا يتم فتح Live Trading حتى تنجح اختبارات الأمان، المصادقة، الأسرار، البيانات، المخاطر، التنفيذ، Paper Trading، وفحوصات CI بدون أخطاء حرجة، ثم اجتياز فحوص Binance Trusted IP والصلاحيات.
 
 ## الخطوات التالية ذات الأولوية
-1. بناء health/readiness وAudit persistence.
+1. Audit persistence مع منع تعديل/حذف السجلات الحساسة.
 2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
 3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
 4. بناء عقود Exchange Adapter وMarket Data ثم Binance Testnet.
