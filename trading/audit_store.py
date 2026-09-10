@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import sqlite3
 from pathlib import Path
-from typing import Iterable
 
 from .audit import AuditEvent
 
@@ -100,7 +100,7 @@ class SQLiteAuditStore:
             AuditEvent(
                 action=row["action"], actor=row["actor"], outcome=row["outcome"],
                 timestamp=row["timestamp"], request_id=row["request_id"],
-                details=tuple(sorted(json.loads(row["details_json"]).items())),
+                details=tuple(sorted((str(k), str(v)) for k, v in json.loads(row["details_json"]).items())),
             )
             for row in rows
         ]
@@ -127,7 +127,7 @@ class SQLiteAuditStore:
             if row["previous_hash"] != previous_hash:
                 raise AuditIntegrityError("audit previous hash mismatch")
             expected_hash = self._hash(event, previous_hash)
-            if not hashlib.compare_digest(expected_hash, row["event_hash"]):
+            if not hmac.compare_digest(expected_hash, row["event_hash"]):
                 raise AuditIntegrityError("audit event hash mismatch")
             previous_hash = row["event_hash"]
             expected_sequence += 1
