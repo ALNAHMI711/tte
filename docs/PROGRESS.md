@@ -5,14 +5,14 @@
 - الفرع: `foundation-v1`
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
-- أسرار/API keys: 🔒 لا تُحفظ في Git
-- آخر دفعة: إضافة سياسات HTTP آمنة + CSRF token + Cookie policy + allowlist للشبكات
+- أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
+- آخر دفعة: إضافة Secret Store مشفّر + masking + fingerprint واختبارات عدم كشف الأسرار
 
 ## لوحة المتابعة
 | المجال | الحالة |
 |---|---:|
-| الأساس البرمجي | 45% |
-| الأمان وإدارة الأسرار | 46% |
+| الأساس البرمجي | 48% |
+| الأمان وإدارة الأسرار | 60% |
 | لوحة التحكم RTL | 10% |
 | المحافظ والمنصات | 0% |
 | محرك السوق | 15% |
@@ -22,10 +22,10 @@
 | Paper Trading | 25% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
-| الاختبارات | 35% |
-| التوثيق | 16% |
+| الاختبارات | 40% |
+| التوثيق | 18% |
 
-**التقدم الإجمالي التقريبي: 25%**
+**التقدم الإجمالي التقريبي: 29%**
 
 > النسبة مؤشر سير عمل وليست نسبة ضمان نجاح أو ربح.
 
@@ -36,7 +36,7 @@
 - حماية أولية لمحاولات تسجيل الدخول عبر exponential backoff وقفل مؤقت بعد عدة إخفاقات.
 - نموذج Audit Event غير قابل للتعديل لتسجيل الأحداث الأمنية دون وضع الأسرار داخل السجل.
 - سياسات HTTP: Secure/HttpOnly/SameSite cookies، CSRF tokens عشوائية ومقارنة constant-time، وIP allowlist صريح.
-- اختبارات مستقلة لسياسات HTTP الأمنية.
+- Secret Store أولي بتشفير Fernet، اشتقاق مفتاح من master key، masking، وبصمة أحادية الاتجاه، مع اختبارات رفض المفتاح الخاطئ وعدم كشف plaintext في ciphertext.
 - CI يثبت المشروع واعتمادياته ثم compile + pytest.
 - Live Trading ما زال مقفولاً افتراضياً ولا يمكن فتحه من هذه الطبقة الأساسية.
 
@@ -44,9 +44,9 @@
 لا يتم فتح Live Trading حتى تنجح اختبارات الأمان، المصادقة، الأسرار، البيانات، المخاطر، التنفيذ، Paper Trading، وفحوصات CI بدون أخطاء حرجة، ثم اجتياز فحوص Binance Trusted IP والصلاحيات.
 
 ## الخطوات التالية ذات الأولوية
-1. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
-2. إضافة تخزين أسرار مشفّر/Secret Provider مع masking واختبارات عدم التسريب.
-3. بناء health/readiness وAudit persistence.
+1. بناء health/readiness وAudit persistence.
+2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
+3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
 4. بناء عقود Exchange Adapter وMarket Data ثم Binance Testnet.
 5. توسيع Risk Engine إلى حدود المستخدم المطلوبة: 0.5%/صفقة، خسارة يومية/أسبوعية، التعرض، correlation وkill switch.
 6. استراتيجية/Backtest/Paper reconciliation ثم لوحة RTL.
