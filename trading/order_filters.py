@@ -51,10 +51,21 @@ def normalize_quantity(quantity: object, symbol: SymbolInfo) -> Decimal:
     return normalized
 
 
+def normalize_price(price: object, symbol: SymbolInfo) -> Decimal:
+    """Normalize price downward to the exchange PRICE_FILTER tick size."""
+    symbol.validate()
+    requested = _decimal(price, "price")
+    tick_size = _decimal(symbol.price_tick_size, "price_tick_size")
+    normalized = floor_to_step(requested, tick_size)
+    if normalized <= 0:
+        raise OrderFilterError("price is below exchange tick size")
+    return normalized
+
+
 def validate_notional(quantity: object, price: object, symbol: SymbolInfo) -> Decimal:
-    """Validate the final quantity-price notional without increasing quantity."""
+    """Validate final quantity-price notional after exchange normalization."""
     final_quantity = normalize_quantity(quantity, symbol)
-    final_price = _decimal(price, "price")
+    final_price = normalize_price(price, symbol)
     minimum = Decimal(str(symbol.min_notional))
     if minimum < 0 or not minimum.is_finite():
         raise OrderFilterError("min_notional is invalid")
@@ -69,8 +80,13 @@ def normalize_and_validate_order(
 ) -> NormalizedOrder:
     """Return a safe normalized order or reject it before any future submission."""
     final_quantity = normalize_quantity(quantity, symbol)
-    final_price = _decimal(price, "price")
-    notional = validate_notional(final_quantity, final_price, symbol)
+    final_price = normalize_price(price, symbol)
+    minimum = Decimal(str(symbol.min_notional))
+    if minimum < 0 or not minimum.is_finite():
+        raise OrderFilterError("min_notional is invalid")
+    notional = final_quantity * final_price
+    if notional < minimum:
+        raise OrderFilterError("order notional is below exchange minimum")
     return NormalizedOrder(
         quantity=final_quantity,
         price=final_price,
