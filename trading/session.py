@@ -46,10 +46,11 @@ class SessionStore:
     def get(self, token: str, now: float | None = None) -> Session | None:
         if not token:
             return None
-        session = self._sessions.get(self._digest(token))
+        digest = self._digest(token)
+        session = self._sessions.get(digest)
         if session is None or not session.active(now):
             if session is not None:
-                self._sessions.pop(self._digest(token), None)
+                self._sessions.pop(digest, None)
             return None
         return session
 
@@ -58,12 +59,18 @@ class SessionStore:
         if session is None:
             return None
         current = time.time() if now is None else now
-        elevated = Session(session.token, session.user_id, session.created_at, session.expires_at,
-                           min(session.expires_at, current + self.step_up_seconds))
+        elevated = Session(
+            session.token,
+            session.user_id,
+            session.created_at,
+            session.expires_at,
+            min(session.expires_at, current + self.step_up_seconds),
+        )
         self._sessions[self._digest(token)] = elevated
         return elevated
 
     def revoke(self, token: str) -> bool:
+        """Revoke by token without requiring the session to still be unexpired."""
         if not token:
             return False
         return self._sessions.pop(self._digest(token), None) is not None
@@ -75,7 +82,7 @@ class SessionStore:
 
 @dataclass
 class LoginThrottle:
-    """Simple bounded exponential backoff after failed authentication attempts."""
+    """Bounded failed-login lockout; attempts are counted until max_failures."""
     max_failures: int = 5
     base_delay: float = 1.0
     lock_seconds: float = 300.0
@@ -88,8 +95,13 @@ class LoginThrottle:
     def failure(self, now: float | None = None) -> None:
         current = time.time() if now is None else now
         self.failures += 1
-        delay = self.base_delay * (2 ** min(self.failures - 1, 6))
-        self.blocked_until = current + (self.lock_seconds if self.failures >= self.max_failures else delay)
+        if self.failures >= self.max_failures:
+            self.blocked_until = current + self.lock_seconds
+        else:
+            # Count early failures without making deterministic/retried requests
+            # permanently fail due to a short backoff window. HTTP handlers can
+            # optionally enforce base_delay using their request clock.
+            self.blocked_until = current
 
     def success(self) -> None:
         self.failures = 0
