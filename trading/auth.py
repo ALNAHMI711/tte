@@ -94,8 +94,8 @@ class AuthenticationService:
             "step_up", session.user_id, "success", request_id=request_id))
 
     def logout(self, token: str) -> bool:
-        session = self.sessions.get(token)
-        return session is not None and self.sessions.revoke(token)
+        """Revoke the credential even when its session has already expired."""
+        return self.sessions.revoke(token)
 
 
 def credential_from_password(user_id: str, password: str) -> UserCredential:
