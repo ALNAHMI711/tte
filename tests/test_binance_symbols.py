@@ -114,6 +114,28 @@ def test_invalid_quantity_filters_are_rejected(monkeypatch: pytest.MonkeyPatch) 
         BinanceSymbolClient().symbol_info("BTCUSDT")
 
 
+@pytest.mark.parametrize(
+    ("filter_index", "field", "value"),
+    [
+        (1, "minQty", "-1"),
+        (1, "stepSize", "NaN"),
+        (2, "minNotional", "-1"),
+    ],
+)
+def test_non_finite_or_negative_numeric_filters_are_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    filter_index: int,
+    field: str,
+    value: str,
+) -> None:
+    data = payload()
+    data["symbols"][0]["filters"][filter_index][field] = value
+    monkeypatch.setattr("trading.binance_symbols.urlopen", lambda request, timeout: FakeResponse(data))
+
+    with pytest.raises(BinanceSymbolResponseError, match=rf"invalid {field}"):
+        BinanceSymbolClient().symbol_info("BTCUSDT")
+
+
 def test_unknown_symbol_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("trading.binance_symbols.urlopen", lambda request, timeout: FakeResponse({"symbols": []}))
     with pytest.raises(BinanceSymbolResponseError, match="missing or ambiguous"):
