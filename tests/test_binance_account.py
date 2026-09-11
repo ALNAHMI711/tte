@@ -10,6 +10,7 @@ import pytest
 
 from trading.binance_account import (
     BinanceAccountClient,
+    BinanceAccountError,
     BinanceAccountNetworkError,
     BinanceAccountResponseError,
 )
