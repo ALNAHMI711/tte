@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>TTE — لوحة التداول</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07101d;color:#e8eef7}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1424,#07101d);min-height:100vh}
+    .wrap{max-width:900px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
+    h1{font-size:22px;margin:0}.sub{color:#91a0b5;font-size:12px;margin-top:4px}.badge{padding:7px 10px;border:1px solid #26364e;border-radius:999px;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{background:#0d1829;border:1px solid #1d2b40;border-radius:16px;padding:14px;box-shadow:0 8px 28px #0004}
+    .name{font-weight:700}.status{font-size:12px;margin-top:6px;color:#8fa1b8}.ok{color:#55d88a}.wait{color:#e7c76a}.off{color:#f07f7f}.value{font-size:20px;font-weight:800;margin-top:10px}.meta{display:flex;justify-content:space-between;color:#91a0b5;font-size:11px;margin-top:8px}
+    .wide{grid-column:1/-1}.notice{padding:12px;border-radius:12px;background:#111f33;border:1px solid #243753;color:#b9c7d9;font-size:12px;line-height:1.7}
+    button{width:100%;margin-top:12px;border:0;border-radius:12px;padding:12px;background:#18304f;color:#fff;font-weight:700}button:active{transform:scale(.99)}
+    @media(max-width:520px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top"><div><h1>منصة TTE للتداول</h1><div class="sub">لوحة تحكم سحابية — التداول الحقيقي مقفل افتراضياً</div></div><span id="mode" class="badge">جارٍ الفحص…</span></header>
+    <section id="cards" class="grid"></section>
+    <section class="card wide">
+      <div class="notice">🛡️ طبقة الأمان: لا يمكن للذكاء الاصطناعي أو Telegram أو الاستراتيجيات تجاوز محرك المخاطر. LIVE لا يُفعّل إلا بعد اجتياز فحوص الأمان والاتصال والصلاحيات وعنوان IP الموثوق.</div>
+      <button onclick="location.href='/login.html'">تسجيل الخروج / العودة للدخول</button>
+    </section>
+  </main>
+<script>
+async function load(){
+  const r=await fetch('/dashboard/status',{credentials:'same-origin'});
+  if(r.status===401){location.href='/login.html';return}
+  if(!r.ok){document.getElementById('mode').textContent='⚠️ خطأ';return}
+  const d=await r.json(); document.getElementById('mode').textContent=d.mode==='PAPER'?'🟢 PAPER':'🔴 '+d.mode;
+  const cards=d.adapters.map(x=>`<article class="card"><div class="name">${x.name}</div><div class="status ${x.enabled?'ok':'off'}">${x.enabled?'🟢 متاح':'🔴 غير متاح'}</div><div class="value">${x.balance}</div><div class="meta"><span>صفقات: ${x.trades}</span><span>PnL: ${x.pnl}</span></div></article>`).join('');
+  document.getElementById('cards').innerHTML=cards+`<article class="card wide"><div class="name">حدود المخاطر الحالية</div><div class="meta"><span>مخاطرة الصفقة</span><b>${d.risk.per_trade_pct}%</b></div><div class="meta"><span>الخسارة اليومية</span><b>${d.risk.daily_loss_pct}%</b></div><div class="meta"><span>أقصى صفقات مفتوحة</span><b>${d.risk.max_open}</b></div><div class="meta"><span>الحد الأدنى للتقييم</span><b>${d.risk.min_score}</b></div></article>`;
+}
+load(); setInterval(load,15000);
+</script>
+</body>
+</html>
