@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-from io import BytesIO
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -57,6 +56,15 @@ def test_network_failures_are_normalized(monkeypatch) -> None:
         BinanceMarketClient().ping()
 
 
+def test_http_failures_are_normalized(monkeypatch) -> None:
+    def fail(*args, **kwargs):
+        raise HTTPError("https://testnet.binance.vision/api/v3/ping", 429, "rate limited", {}, None)
+
+    monkeypatch.setattr("trading.binance_market.urlopen", fail)
+    with pytest.raises(BinanceNetworkError):
+        BinanceMarketClient().ping()
+
+
 def test_invalid_json_is_rejected(monkeypatch) -> None:
     class BadResponse(FakeResponse):
         def __init__(self):
@@ -65,6 +73,15 @@ def test_invalid_json_is_rejected(monkeypatch) -> None:
     monkeypatch.setattr("trading.binance_market.urlopen", lambda *args, **kwargs: BadResponse())
     with pytest.raises(BinanceResponseError):
         BinanceMarketClient().ping()
+
+
+def test_non_object_ticker_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trading.binance_market.urlopen",
+        lambda *args, **kwargs: FakeResponse(["unexpected"]),
+    )
+    with pytest.raises(BinanceResponseError):
+        BinanceMarketClient().ticker("BTCUSDT")
 
 
 def test_ticker_is_normalized_and_symbol_is_uppercase(monkeypatch) -> None:
@@ -106,6 +123,15 @@ def test_order_book_is_normalized_and_limit_is_bounded(monkeypatch) -> None:
         BinanceMarketClient().order_book("BTCUSDT", limit=0)
     with pytest.raises(ValueError):
         BinanceMarketClient().order_book("BTCUSDT", limit=1001)
+
+
+def test_malformed_order_book_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trading.binance_market.urlopen",
+        lambda *args, **kwargs: FakeResponse({"bids": [["bad", "2"]], "asks": []}),
+    )
+    with pytest.raises(BinanceResponseError):
+        BinanceMarketClient().order_book("BTCUSDT")
 
 
 def test_candles_are_normalized_to_utc(monkeypatch) -> None:
