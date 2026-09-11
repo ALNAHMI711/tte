@@ -33,7 +33,7 @@ def test_normalize_quantity_accepts_exact_step() -> None:
 
 def test_normalize_quantity_rejects_after_floor_below_minimum() -> None:
     with pytest.raises(OrderFilterError, match="below exchange minimum"):
-        normalize_quantity("0.0019", SYMBOL)
+        normalize_quantity("0.0009", SYMBOL)
 
 
 def test_min_notional_is_enforced_after_quantity_normalization() -> None:
