@@ -42,12 +42,15 @@ class SymbolInfo:
     min_quantity: float
     quantity_step: float
     min_notional: float
+    price_tick_size: float = 0.0
 
     def validate(self) -> None:
         if not self.symbol or not self.base_asset or not self.quote_asset:
             raise ValueError("symbol metadata is incomplete")
         if self.min_quantity <= 0 or self.quantity_step <= 0 or self.min_notional < 0:
             raise ValueError("symbol limits must be valid positive values")
+        if self.price_tick_size < 0:
+            raise ValueError("price tick size must be non-negative")
 
 
 class AdapterError(RuntimeError):
