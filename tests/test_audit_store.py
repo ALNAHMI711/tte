@@ -43,15 +43,11 @@ def test_chain_detects_tampering(tmp_path):
     with SQLiteAuditStore(path) as store:
         store.append(event("login"))
         store.append(event("order.check", "req-2"))
-        store._conn.execute("UPDATE audit_events SET details_json='{}' WHERE sequence=2")
-        store._conn.rollback()
-        # Direct database connection simulates an administrator modifying the file.
         store.close()
 
+    # A privileged administrator with direct file access can bypass application
+    # methods. The integrity chain must detect the resulting modification.
     raw = sqlite3.connect(path)
-    raw.execute("PRAGMA writable_schema = ON") if False else None
-    # The normal SQL path is protected by triggers; corruption is tested by changing
-    # the stored hash through a separate connection after dropping only the trigger.
     raw.execute("DROP TRIGGER audit_events_no_update")
     raw.execute("UPDATE audit_events SET event_hash='tampered' WHERE sequence=2")
     raw.commit()
