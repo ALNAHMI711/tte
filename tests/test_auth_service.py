@@ -18,10 +18,11 @@ def test_success_creates_session_without_returning_password():
 
 def test_bad_credentials_are_throttled():
     service = make_service()
-    for _ in range(5):
-        result = service.authenticate("admin", "wrong password", now=100.0)
+    # Respect the bounded exponential retry schedule: 1s, 2s, 4s, then lock.
+    for now in (100.0, 101.0, 103.0, 107.0, 115.0):
+        result = service.authenticate("admin", "wrong password", now=now)
         assert not result.authenticated
-    blocked = service.authenticate("admin", "correct horse battery staple", now=101.0)
+    blocked = service.authenticate("admin", "correct horse battery staple", now=116.0)
     assert not blocked.authenticated
     assert blocked.audit_event is not None
     assert blocked.audit_event.outcome == "blocked"
