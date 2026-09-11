@@ -65,20 +65,41 @@ def test_account_snapshot_is_signed_and_normalized(monkeypatch: pytest.MonkeyPat
 
     assert parsed.scheme == "https"
     assert f"{parsed.scheme}://{parsed.netloc}" == TESTNET_BASE_URL
+    assert parsed.path == "/api/v3/account"
     assert params["timestamp"] == ["1700000000123"]
     assert params["recvWindow"] == ["5000"]
     assert params["signature"] == [expected]
     assert captured["api_key"] == "api-key"
     assert captured["timeout"] == 10.0
     assert snapshot.account_id == "SPOT"
+    assert snapshot.environment.value == "testnet"
     assert snapshot.can_trade is True
     assert snapshot.can_withdraw is False
     assert snapshot.balances == (("BTC", 1.5), ("USDT", 102.0))
+    assert secret not in captured["url"]
 
 
 def test_client_rejects_non_testnet_base_url() -> None:
     with pytest.raises(BinanceAccountError, match="only Binance Spot Testnet"):
         BinanceAccountClient("key", "secret", base_url="https://api.binance.com")
+
+
+def test_client_rejects_evil_subdomain() -> None:
+    with pytest.raises(BinanceAccountError, match="only Binance Spot Testnet"):
+        BinanceAccountClient("key", "secret", base_url="https://testnet.binance.vision.evil.example")
+
+
+def test_constructor_validates_credentials_and_limits() -> None:
+    with pytest.raises(BinanceAccountError, match="credentials"):
+        BinanceAccountClient("", "secret")
+    with pytest.raises(BinanceAccountError, match="credentials"):
+        BinanceAccountClient("key", "")
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        BinanceAccountClient("key", "secret", timeout_seconds=0)
+    with pytest.raises(ValueError, match="recv_window"):
+        BinanceAccountClient("key", "secret", recv_window=0)
+    with pytest.raises(ValueError, match="recv_window"):
+        BinanceAccountClient("key", "secret", recv_window=60001)
 
 
 def test_network_errors_are_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,3 +162,8 @@ def test_secret_is_not_present_in_normalized_errors(monkeypatch: pytest.MonkeyPa
         BinanceAccountClient("key", secret).account_snapshot()
 
     assert secret not in str(exc_info.value)
+
+
+def test_client_has_no_order_submission_method() -> None:
+    client = BinanceAccountClient("key", "secret")
+    assert not hasattr(client, "submit_order")
