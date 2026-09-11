@@ -82,7 +82,7 @@ class SessionStore:
 
 @dataclass
 class LoginThrottle:
-    """Bounded failed-login lockout; attempts are counted until max_failures."""
+    """Bounded exponential backoff after failed authentication attempts."""
     max_failures: int = 5
     base_delay: float = 1.0
     lock_seconds: float = 300.0
@@ -97,11 +97,9 @@ class LoginThrottle:
         self.failures += 1
         if self.failures >= self.max_failures:
             self.blocked_until = current + self.lock_seconds
-        else:
-            # Count early failures without making deterministic/retried requests
-            # permanently fail due to a short backoff window. HTTP handlers can
-            # optionally enforce base_delay using their request clock.
-            self.blocked_until = current
+            return
+        delay = self.base_delay * (2 ** (self.failures - 1))
+        self.blocked_until = current + delay
 
     def success(self) -> None:
         self.failures = 0
