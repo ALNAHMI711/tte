@@ -7,6 +7,7 @@ from trading.order_filters import (
     OrderFilterError,
     floor_to_step,
     normalize_and_validate_order,
+    normalize_price,
     normalize_quantity,
     validate_notional,
 )
@@ -19,6 +20,7 @@ SYMBOL = SymbolInfo(
     min_quantity=Decimal("0.001"),
     quantity_step=Decimal("0.001"),
     min_notional=Decimal("10"),
+    price_tick_size=Decimal("0.01"),
 )
 
 
@@ -36,6 +38,19 @@ def test_normalize_quantity_rejects_after_floor_below_minimum() -> None:
         normalize_quantity("0.0009", SYMBOL)
 
 
+def test_normalize_price_floors_to_tick_size() -> None:
+    assert normalize_price("100.1234", SYMBOL) == Decimal("100.12")
+
+
+def test_normalize_price_accepts_exact_tick() -> None:
+    assert normalize_price("100.12", SYMBOL) == Decimal("100.12")
+
+
+def test_normalize_price_rejects_value_below_one_tick() -> None:
+    with pytest.raises(OrderFilterError, match="below exchange tick size"):
+        normalize_price("0.009", SYMBOL)
+
+
 def test_min_notional_is_enforced_after_quantity_normalization() -> None:
     with pytest.raises(OrderFilterError, match="notional"):
         validate_notional("0.0099", "1000", SYMBOL)
@@ -45,8 +60,12 @@ def test_exact_min_notional_is_accepted() -> None:
     assert validate_notional("0.01", "1000", SYMBOL) == Decimal("10.00")
 
 
+def test_notional_uses_normalized_price() -> None:
+    assert validate_notional("0.01", "1000.009", SYMBOL) == Decimal("10.00")
+
+
 def test_combined_order_result_is_deterministic() -> None:
-    result = normalize_and_validate_order("0.1239", "100.00", SYMBOL)
+    result = normalize_and_validate_order("0.1239", "100.009", SYMBOL)
     assert result.quantity == Decimal("0.123")
     assert result.price == Decimal("100.00")
     assert result.notional == Decimal("12.30000")

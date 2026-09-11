@@ -35,7 +35,7 @@ def payload(**overrides: object) -> dict[str, object]:
         "baseAsset": "BTC",
         "quoteAsset": "USDT",
         "filters": [
-            {"filterType": "PRICE_FILTER", "minPrice": "0.01000000"},
+            {"filterType": "PRICE_FILTER", "minPrice": "0.01000000", "tickSize": "0.01000000"},
             {"filterType": "LOT_SIZE", "minQty": "0.00001000", "stepSize": "0.00001000"},
             {"filterType": "MIN_NOTIONAL", "minNotional": "10.00000000"},
         ],
@@ -64,6 +64,7 @@ def test_symbol_filters_are_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
     assert info.min_quantity == 0.00001
     assert info.quantity_step == 0.00001
     assert info.min_notional == 10.0
+    assert info.price_tick_size == 0.01
 
 
 def test_client_is_testnet_only() -> None:
@@ -111,6 +112,14 @@ def test_invalid_quantity_filters_are_rejected(monkeypatch: pytest.MonkeyPatch) 
     data["symbols"][0]["filters"][1]["stepSize"] = "0"
     monkeypatch.setattr("trading.binance_symbols.urlopen", lambda request, timeout: FakeResponse(data))
     with pytest.raises(BinanceSymbolResponseError, match="quantity filters"):
+        BinanceSymbolClient().symbol_info("BTCUSDT")
+
+
+def test_invalid_price_filters_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    data = payload()
+    data["symbols"][0]["filters"][0]["tickSize"] = "0"
+    monkeypatch.setattr("trading.binance_symbols.urlopen", lambda request, timeout: FakeResponse(data))
+    with pytest.raises(BinanceSymbolResponseError, match="price filters"):
         BinanceSymbolClient().symbol_info("BTCUSDT")
 
 

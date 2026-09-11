@@ -92,13 +92,17 @@ class BinanceSymbolClient:
             raise BinanceSymbolResponseError("symbol metadata is malformed") from exc
 
         by_type = {f.get("filterType"): f for f in filters if isinstance(f, dict)}
+        price = by_type.get("PRICE_FILTER")
         lot = by_type.get("LOT_SIZE")
         notional = by_type.get("MIN_NOTIONAL") or by_type.get("NOTIONAL")
-        if not isinstance(lot, dict) or not isinstance(notional, dict):
+        if not isinstance(price, dict) or not isinstance(lot, dict) or not isinstance(notional, dict):
             raise BinanceSymbolResponseError("required symbol filters are missing")
+        tick_size = self._decimal(price.get("tickSize"), "tickSize")
         min_qty = self._decimal(lot.get("minQty"), "minQty")
         step = self._decimal(lot.get("stepSize"), "stepSize")
         min_notional = self._decimal(notional.get("minNotional"), "minNotional")
+        if tick_size <= 0:
+            raise BinanceSymbolResponseError("price filters must be positive")
         if min_qty <= 0 or step <= 0:
             raise BinanceSymbolResponseError("quantity filters must be positive")
         result = SymbolInfo(
@@ -108,6 +112,7 @@ class BinanceSymbolClient:
             min_quantity=float(min_qty),
             quantity_step=float(step),
             min_notional=float(min_notional),
+            price_tick_size=float(tick_size),
         )
         result.validate()
         return result
