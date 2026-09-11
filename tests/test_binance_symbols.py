@@ -8,6 +8,7 @@ import pytest
 
 from trading.binance_symbols import (
     BinanceSymbolClient,
+    BinanceSymbolError,
     BinanceSymbolNetworkError,
     BinanceSymbolResponseError,
 )
@@ -68,7 +69,7 @@ def test_symbol_filters_are_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_client_is_testnet_only() -> None:
-    with pytest.raises(BinanceSymbolResponseError.__mro__[1], match="only Binance Spot Testnet"):
+    with pytest.raises(BinanceSymbolError, match="only Binance Spot Testnet"):
         BinanceSymbolClient(base_url="https://api.binance.com")
 
 
