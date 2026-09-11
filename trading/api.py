@@ -47,6 +47,10 @@ def _csrf_valid(request: Request) -> bool:
     return bool(supplied and cookie and constant_time_token_match(cookie, supplied))
 
 
+def _authenticated_session(request: Request, auth: AuthenticationService):
+    return auth.sessions.get(request.cookies.get(SESSION_COOKIE.name, ""))
+
+
 def create_app(auth: AuthenticationService, health: HealthChecker | None = None) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
@@ -119,10 +123,31 @@ def create_app(auth: AuthenticationService, health: HealthChecker | None = None)
 
     @app.get("/control/session")
     def session_status(request: Request) -> JSONResponse:
-        token = request.cookies.get(SESSION_COOKIE.name, "")
-        session = auth.sessions.get(token)
+        session = _authenticated_session(request, auth)
         if session is None:
             return _json_error(401, "authentication_required")
         return JSONResponse({"authenticated": True, "user_id": session.user_id, "step_up": session.step_up_active()})
+
+    @app.get("/dashboard/status")
+    def dashboard_status(request: Request) -> JSONResponse:
+        """Return only non-sensitive dashboard state; never expose credentials."""
+        session = _authenticated_session(request, auth)
+        if session is None:
+            return _json_error(401, "authentication_required")
+        return JSONResponse({
+            "mode": "PAPER",
+            "live_trading": False,
+            "kill_switch": False,
+            "adapters": [
+                {"name": "Spot", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "Cross Margin", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "Isolated Margin", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "USDⓈ-M Futures", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "COIN-M Futures", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "Alpha", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+                {"name": "Stocks", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
+            ],
+            "risk": {"per_trade_pct": 0.5, "daily_loss_pct": 2.0, "max_open": 5, "min_score": 85},
+        })
 
     return app
