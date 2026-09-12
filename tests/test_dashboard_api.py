@@ -174,8 +174,8 @@ def test_kill_switch_control_records_safe_audit_events():
     assert [event.outcome for event in events] == ["success", "success"]
     assert [event.request_id for event in events] == ["req-kill-1", "req-kill-2"]
     assert [dict(event.details) for event in events] == [
-        {"enabled": True, "reason_present": True},
-        {"enabled": False, "reason_present": True},
+        {"enabled": "True", "reason_present": "True"},
+        {"enabled": "False", "reason_present": "True"},
     ]
     assert all("sensitive" not in str(event.to_dict()).lower() for event in events)
 
