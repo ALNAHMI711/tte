@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from trading.api import create_app
+from trading.audit_store import SQLiteAuditStore
 from trading.auth import AuthenticationService, credential_from_password
 from trading.session import SessionStore
 
@@ -63,3 +64,40 @@ def test_invalid_login_does_not_leak_credential_details():
     response = client.post("/login", json={"user_id": "admin", "password": "wrong password"})
     assert response.status_code == 401
     assert response.json() == {"error": "authentication_failed"}
+
+
+def test_kill_switch_audit_persists_and_chain_verifies(tmp_path):
+    auth = AuthenticationService(
+        {"admin": credential_from_password("admin", PASSWORD)},
+        SessionStore(ttl_seconds=100, step_up_seconds=10),
+    )
+    with SQLiteAuditStore(tmp_path / "audit.sqlite3") as store:
+        client = TestClient(
+            create_app(auth, audit_store=store),
+            base_url="https://testserver",
+        )
+        assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+        csrf = client.get("/csrf").json()["csrf_token"]
+        assert client.post(
+            "/control/step-up",
+            json={"user_id": "admin", "password": PASSWORD},
+            headers={"x-csrf-token": csrf},
+        ).status_code == 200
+        response = client.post(
+            "/control/kill-switch",
+            json={"enabled": True, "reason": "integration test"},
+            headers={"x-csrf-token": csrf, "x-request-id": "audit-integration-1"},
+        )
+        assert response.status_code == 200
+        assert response.json()["enabled"] is True
+
+        events = store.list(limit=10)
+        kill_events = [event for event in events if event.action == "kill_switch"]
+        assert len(kill_events) == 1
+        event = kill_events[0]
+        assert event.actor == "admin"
+        assert event.outcome == "success"
+        assert event.request_id == "audit-integration-1"
+        assert dict(event.details) == {"enabled": "True", "reason_present": "True"}
+        assert "integration test" not in str(event.details)
+        assert store.verify_chain() is True
