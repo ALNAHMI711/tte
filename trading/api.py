@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from .audit import AuditEvent, AuditLog
 from .auth import AuthenticationService
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
@@ -56,10 +57,13 @@ def create_app(
     auth: AuthenticationService,
     health: HealthChecker | None = None,
     kill_switch: KillSwitch | None = None,
+    audit_log: AuditLog | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
     switch = kill_switch or KillSwitch()
+    log = audit_log or AuditLog()
+    app.state.audit_log = log
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -175,6 +179,15 @@ def create_app(
             state = switch.activate(reason)
         else:
             state = switch.deactivate()
+        log.record(
+            AuditEvent.create(
+                "kill_switch",
+                session.user_id,
+                "success",
+                request_id=request.headers.get("x-request-id", ""),
+                details={"enabled": state.enabled, "reason_present": bool(reason.strip())},
+            )
+        )
         return JSONResponse({"enabled": state.enabled, "reason": state.reason})
 
     @app.get("/dashboard/status")
