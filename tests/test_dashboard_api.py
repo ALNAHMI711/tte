@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from trading.api import create_app
+from trading.audit import AuditLog
 from trading.auth import AuthenticationService, credential_from_password
 from trading.kill_switch import KillSwitch
 from trading.session import SessionStore
@@ -9,13 +10,13 @@ from trading.session import SessionStore
 PASSWORD = "correct horse battery staple"
 
 
-def make_client(kill_switch: KillSwitch | None = None):
+def make_client(kill_switch: KillSwitch | None = None, audit_log: AuditLog | None = None):
     auth = AuthenticationService(
         {"admin": credential_from_password("admin", PASSWORD)},
         SessionStore(ttl_seconds=100, step_up_seconds=10),
     )
     return TestClient(
-        create_app(auth, kill_switch=kill_switch),
+        create_app(auth, kill_switch=kill_switch, audit_log=audit_log),
         base_url="https://testserver",
     )
 
@@ -142,3 +143,38 @@ def test_kill_switch_control_rejects_invalid_payload_without_mutating_state():
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_request"
     assert kill_switch.blocks_new_orders() is False
+
+
+def test_kill_switch_control_records_safe_audit_events():
+    audit_log = AuditLog()
+    client = make_client(audit_log=audit_log)
+    csrf_token = login_and_csrf(client)
+    assert step_up(client, csrf_token).status_code == 200
+
+    headers = {"x-csrf-token": csrf_token, "x-request-id": "req-kill-1"}
+    activate = client.post(
+        "/control/kill-switch",
+        json={"enabled": True, "reason": "sensitive operator note"},
+        headers=headers,
+    )
+    assert activate.status_code == 200
+
+    headers["x-request-id"] = "req-kill-2"
+    deactivate = client.post(
+        "/control/kill-switch",
+        json={"enabled": False, "reason": "another sensitive note"},
+        headers=headers,
+    )
+    assert deactivate.status_code == 200
+
+    events = audit_log.snapshot()
+    assert len(events) == 2
+    assert [event.action for event in events] == ["kill_switch", "kill_switch"]
+    assert [event.user_id for event in events] == ["admin", "admin"]
+    assert [event.outcome for event in events] == ["success", "success"]
+    assert [event.request_id for event in events] == ["req-kill-1", "req-kill-2"]
+    assert [dict(event.details) for event in events] == [
+        {"enabled": True, "reason_present": True},
+        {"enabled": False, "reason_present": True},
+    ]
+    assert all("sensitive" not in str(event.to_dict()).lower() for event in events)
