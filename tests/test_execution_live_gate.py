@@ -1,6 +1,7 @@
 import pytest
 
 from trading.binance_preflight import PreflightStatus, run_binance_preflight
+from trading.config import Settings
 from trading.execution import ExecutionEngine, OrderRequest
 from trading.risk import RiskContext, RiskRejected
 
@@ -18,9 +19,15 @@ def passing_preflight():
     )
 
 
+def enable_live_mode(monkeypatch):
+    monkeypatch.setattr(
+        "trading.execution.settings",
+        Settings(live_trading=True, paper_trading=False, session_secret="test-secret"),
+    )
+
+
 def test_live_execution_requires_completed_preflight(monkeypatch):
-    monkeypatch.setattr("trading.execution.settings.live_trading", True)
-    monkeypatch.setattr("trading.execution.settings.paper_trading", False)
+    enable_live_mode(monkeypatch)
 
     engine = ExecutionEngine()
 
@@ -29,8 +36,7 @@ def test_live_execution_requires_completed_preflight(monkeypatch):
 
 
 def test_live_execution_rejects_failed_preflight(monkeypatch):
-    monkeypatch.setattr("trading.execution.settings.live_trading", True)
-    monkeypatch.setattr("trading.execution.settings.paper_trading", False)
+    enable_live_mode(monkeypatch)
 
     failed = run_binance_preflight(
         live_requested=True,
@@ -51,8 +57,7 @@ def test_live_execution_rejects_failed_preflight(monkeypatch):
 
 
 def test_live_execution_reaches_exchange_adapter_boundary_only_after_passing_preflight(monkeypatch):
-    monkeypatch.setattr("trading.execution.settings.live_trading", True)
-    monkeypatch.setattr("trading.execution.settings.paper_trading", False)
+    enable_live_mode(monkeypatch)
 
     engine = ExecutionEngine(live_preflight=passing_preflight())
 
