@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from trading.api import create_app
 from trading.audit_store import SQLiteAuditStore
 from trading.auth import AuthenticationService, credential_from_password
+from trading.server_ip import PublicIPClient, PublicIPResult, PublicIPError
 from trading.session import SessionStore
 
 
@@ -64,6 +65,54 @@ def test_invalid_login_does_not_leak_credential_details():
     response = client.post("/login", json={"user_id": "admin", "password": "wrong password"})
     assert response.status_code == 401
     assert response.json() == {"error": "authentication_failed"}
+
+
+def test_server_ip_endpoint_requires_authentication():
+    client = make_client()
+    assert client.get("/control/server-ip").status_code == 401
+
+
+def test_server_ip_endpoint_returns_safe_readiness_result():
+    auth = AuthenticationService(
+        {"admin": credential_from_password("admin", PASSWORD)},
+        SessionStore(ttl_seconds=100, step_up_seconds=10),
+    )
+    client = TestClient(
+        create_app(
+            auth,
+            public_ip_client=PublicIPClient(url="https://example.test/ip"),
+        ),
+        base_url="https://testserver",
+    )
+    client.app.state.public_ip_client.resolve = lambda: PublicIPResult(  # type: ignore[method-assign]
+        ip="203.0.113.10", source="https://example.test/ip"
+    )
+    assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+    response = client.get("/control/server-ip")
+    assert response.status_code == 200
+    assert response.json() == {
+        "ip": "203.0.113.10",
+        "source": "https://example.test/ip",
+        "trusted_ip_ready": True,
+    }
+
+
+def test_server_ip_endpoint_fails_closed_when_lookup_fails():
+    auth = AuthenticationService(
+        {"admin": credential_from_password("admin", PASSWORD)},
+        SessionStore(ttl_seconds=100, step_up_seconds=10),
+    )
+    client = TestClient(
+        create_app(auth, public_ip_client=PublicIPClient(url="https://example.test/ip")),
+        base_url="https://testserver",
+    )
+    client.app.state.public_ip_client.resolve = lambda: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        PublicIPError("lookup failed")
+    )
+    client.post("/login", json={"user_id": "admin", "password": PASSWORD})
+    response = client.get("/control/server-ip")
+    assert response.status_code == 503
+    assert response.json() == {"error": "server_ip_unavailable"}
 
 
 def test_kill_switch_audit_persists_and_chain_verifies(tmp_path):
