@@ -36,7 +36,7 @@ def test_execution_routes_exchange_normalized_values() -> None:
 
     engine.paper.submit = capture  # type: ignore[method-assign]
     order = engine.submit(
-        OrderRequest("BTC/USDT", "buy", 0.0019, 1000.1234),
+        OrderRequest("BTC/USDT", "buy", 0.0019, 10000.1234),
         RiskContext(),
         SYMBOL,
     )
@@ -46,7 +46,7 @@ def test_execution_routes_exchange_normalized_values() -> None:
         "symbol": "BTC/USDT",
         "side": "buy",
         "quantity": 0.001,
-        "price": 1000.12,
+        "price": 10000.12,
     }
 
 
