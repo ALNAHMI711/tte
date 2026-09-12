@@ -12,6 +12,7 @@ from .auth import AuthenticationService
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
 from .kill_switch import KillSwitch
+from .server_ip import PublicIPClient, PublicIPError
 
 SESSION_COOKIE = CookiePolicy()
 CSRF_COOKIE = "tte_csrf"
@@ -59,13 +60,16 @@ def create_app(
     kill_switch: KillSwitch | None = None,
     audit_log: AuditLog | None = None,
     audit_store: AuditPersistence | None = None,
+    public_ip_client: PublicIPClient | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
     switch = kill_switch or KillSwitch()
     log = audit_log or AuditLog(persistence=audit_store)
+    ip_client = public_ip_client or PublicIPClient()
     app.state.audit_log = log
     app.state.audit_store = audit_store
+    app.state.public_ip_client = ip_client
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -139,6 +143,17 @@ def create_app(
         if session is None:
             return _json_error(401, "authentication_required")
         return JSONResponse({"authenticated": True, "user_id": session.user_id, "step_up": session.step_up_active()})
+
+    @app.get("/control/server-ip")
+    def server_ip_status(request: Request) -> JSONResponse:
+        """Resolve the server's public outbound IP without credentials or trading calls."""
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        try:
+            result = ip_client.resolve()
+        except PublicIPError:
+            return _json_error(503, "server_ip_unavailable")
+        return JSONResponse({"ip": result.ip, "source": result.source, "trusted_ip_ready": True})
 
     @app.get("/control/kill-switch")
     def kill_switch_status(request: Request) -> JSONResponse:
