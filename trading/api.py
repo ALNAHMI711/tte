@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from .auth import AuthenticationService
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
+from .kill_switch import KillSwitch
 
 SESSION_COOKIE = CookiePolicy()
 CSRF_COOKIE = "tte_csrf"
@@ -51,9 +52,14 @@ def _authenticated_session(request: Request, auth: AuthenticationService):
     return auth.sessions.get(request.cookies.get(SESSION_COOKIE.name, ""))
 
 
-def create_app(auth: AuthenticationService, health: HealthChecker | None = None) -> FastAPI:
+def create_app(
+    auth: AuthenticationService,
+    health: HealthChecker | None = None,
+    kill_switch: KillSwitch | None = None,
+) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
+    switch = kill_switch or KillSwitch()
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -134,10 +140,12 @@ def create_app(auth: AuthenticationService, health: HealthChecker | None = None)
         session = _authenticated_session(request, auth)
         if session is None:
             return _json_error(401, "authentication_required")
+        kill_state = switch.snapshot()
         return JSONResponse({
             "mode": "PAPER",
             "live_trading": False,
-            "kill_switch": False,
+            "kill_switch": kill_state.enabled,
+            "kill_switch_reason": kill_state.reason,
             "adapters": [
                 {"name": "Spot", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
                 {"name": "Cross Margin", "enabled": False, "balance": "—", "trades": 0, "pnl": "—"},
