@@ -4,8 +4,9 @@ import pytest
 
 from trading.adapters import SymbolInfo
 from trading.execution import ExecutionEngine, OrderRequest
+from trading.kill_switch import KillSwitch
 from trading.order_filters import OrderFilterError
-from trading.risk import RiskContext
+from trading.risk import RiskContext, RiskRejected
 
 
 SYMBOL = SymbolInfo(
@@ -69,3 +70,43 @@ def test_execution_rejects_minimum_notional_before_paper_submission() -> None:
         )
 
     assert called is False
+
+
+def test_execution_kill_switch_blocks_new_orders_before_paper_submission() -> None:
+    kill_switch = KillSwitch()
+    kill_switch.activate("operator requested stop")
+    engine = ExecutionEngine(kill_switch=kill_switch)
+    called = False
+
+    def fail_if_called(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("paper broker must not receive an order while kill switch is active")
+
+    engine.paper.submit = fail_if_called  # type: ignore[method-assign]
+
+    with pytest.raises(RiskRejected, match="operator requested stop"):
+        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+
+    assert called is False
+
+
+def test_execution_resumes_new_orders_after_kill_switch_deactivation() -> None:
+    kill_switch = KillSwitch()
+    kill_switch.activate("temporary stop")
+    engine = ExecutionEngine(kill_switch=kill_switch)
+    kill_switch.deactivate()
+
+    order = engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+
+    assert order.status == "FILLED"
+
+
+def test_execution_preserves_context_emergency_stop_gate() -> None:
+    engine = ExecutionEngine()
+
+    with pytest.raises(RiskRejected, match="emergency stop"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(emergency_stop=True),
+        )
