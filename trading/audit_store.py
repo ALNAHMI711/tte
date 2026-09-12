@@ -89,6 +89,13 @@ class SQLiteAuditStore:
         self._conn.commit()
         return int(cursor.lastrowid)
 
+    def record(self, event: AuditEvent) -> AuditEvent:
+        """Persist an event using the same recorder contract as the in-memory log."""
+        if not isinstance(event, AuditEvent):
+            raise TypeError("event must be an AuditEvent")
+        self.append(event)
+        return event
+
     def list(self, limit: int = 100) -> list[AuditEvent]:
         if limit <= 0:
             raise ValueError("limit must be positive")
