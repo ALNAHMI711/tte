@@ -134,6 +134,49 @@ def create_app(
             return _json_error(401, "authentication_required")
         return JSONResponse({"authenticated": True, "user_id": session.user_id, "step_up": session.step_up_active()})
 
+    @app.get("/control/kill-switch")
+    def kill_switch_status(request: Request) -> JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        state = switch.snapshot()
+        return JSONResponse({"enabled": state.enabled, "reason": state.reason})
+
+    @app.post("/control/kill-switch")
+    async def kill_switch_control(request: Request) -> JSONResponse:
+        session = _authenticated_session(request, auth)
+        if session is None:
+            return _json_error(401, "authentication_required")
+        if not _csrf_valid(request):
+            return _json_error(403, "csrf_failed")
+        if not session.step_up_active():
+            return _json_error(403, "step_up_required")
+
+        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        body = await request.body()
+        if content_type == "application/json":
+            try:
+                data = json.loads(body or b"{}")
+            except (TypeError, ValueError):
+                return _json_error(400, "invalid_request")
+        else:
+            try:
+                values = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+            except UnicodeDecodeError:
+                return _json_error(400, "invalid_request")
+            data = {key: values.get(key, [""])[0] for key in ("enabled", "reason")}
+        if not isinstance(data, dict):
+            return _json_error(400, "invalid_request")
+
+        enabled = data.get("enabled")
+        reason = data.get("reason", "")
+        if not isinstance(enabled, bool) or not isinstance(reason, str):
+            return _json_error(400, "invalid_request")
+        if enabled:
+            state = switch.activate(reason)
+        else:
+            state = switch.deactivate()
+        return JSONResponse({"enabled": state.enabled, "reason": state.reason})
+
     @app.get("/dashboard/status")
     def dashboard_status(request: Request) -> JSONResponse:
         """Return only non-sensitive dashboard state; never expose credentials."""
