@@ -4,7 +4,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .binance_connectivity import BinanceConnectivityResult
-from .binance_preflight import BinancePreflightReport, run_binance_preflight
+from .binance_preflight import (
+    BinancePreflightReport,
+    PreflightCheck,
+    PreflightStatus,
+    run_binance_preflight,
+)
 
 
 @dataclass(frozen=True)
@@ -40,17 +45,13 @@ def evaluate_live_gate(inputs: LiveGateInputs) -> BinancePreflightReport:
         risk_configured=inputs.risk_configured,
         dry_run_passed=inputs.dry_run_passed,
     )
-    return BinancePreflightReport(
-        checks=report.checks
-        + (
-            type(report.checks[0])(
-                "testnet_connectivity",
-                type(report.checks[0].status).PASS
-                if connectivity_passed
-                else type(report.checks[0].status).FAIL,
-                "Binance Testnet connectivity verified"
-                if connectivity_passed
-                else "Binance Testnet connectivity is required",
-            ),
-        )
+    connectivity_check = PreflightCheck(
+        name="testnet_connectivity",
+        status=PreflightStatus.PASS if connectivity_passed else PreflightStatus.FAIL,
+        detail=(
+            "Binance Testnet connectivity verified"
+            if connectivity_passed
+            else "Binance Testnet connectivity is required"
+        ),
     )
+    return BinancePreflightReport(checks=report.checks + (connectivity_check,))
