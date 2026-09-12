@@ -10,10 +10,10 @@ from trading.session import SessionStore
 PASSWORD = "correct horse battery staple"
 
 
-def make_client(kill_switch: KillSwitch | None = None, audit_log: AuditLog | None = None):
+def make_client(kill_switch: KillSwitch | None = None, audit_log: AuditLog | None = None, *, sessions: SessionStore | None = None):
     auth = AuthenticationService(
         {"admin": credential_from_password("admin", PASSWORD)},
-        SessionStore(ttl_seconds=100, step_up_seconds=10),
+        sessions or SessionStore(ttl_seconds=100, step_up_seconds=10),
     )
     return TestClient(
         create_app(auth, kill_switch=kill_switch, audit_log=audit_log),
@@ -178,3 +178,46 @@ def test_kill_switch_control_records_safe_audit_events():
         {"enabled": False, "reason_present": True},
     ]
     assert all("sensitive" not in str(event.to_dict()).lower() for event in events)
+
+
+def test_kill_switch_control_denies_expired_step_up(monkeypatch):
+    import trading.session as session_module
+
+    sessions = SessionStore(ttl_seconds=100, step_up_seconds=10)
+    client = make_client(sessions=sessions)
+    csrf_token = login_and_csrf(client)
+    assert step_up(client, csrf_token).status_code == 200
+
+    now = session_module.time.time()
+    monkeypatch.setattr(session_module.time, "time", lambda: now + 11)
+    response = client.post(
+        "/control/kill-switch",
+        json={"enabled": True, "reason": "expired elevation"},
+        headers={"x-csrf-token": csrf_token},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"] == "step_up_required"
+
+
+def test_kill_switch_step_up_is_isolated_per_session():
+    client_a = make_client()
+    client_b = make_client()
+    csrf_a = login_and_csrf(client_a)
+    csrf_b = login_and_csrf(client_b)
+
+    assert step_up(client_a, csrf_a).status_code == 200
+
+    response_a = client_a.post(
+        "/control/kill-switch",
+        json={"enabled": True, "reason": "session a"},
+        headers={"x-csrf-token": csrf_a},
+    )
+    assert response_a.status_code == 200
+
+    response_b = client_b.post(
+        "/control/kill-switch",
+        json={"enabled": False, "reason": "session b"},
+        headers={"x-csrf-token": csrf_b},
+    )
+    assert response_b.status_code == 403
+    assert response_b.json()["error"] == "step_up_required"
