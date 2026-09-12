@@ -170,7 +170,7 @@ def test_kill_switch_control_records_safe_audit_events():
     events = audit_log.snapshot()
     assert len(events) == 2
     assert [event.action for event in events] == ["kill_switch", "kill_switch"]
-    assert [event.user_id for event in events] == ["admin", "admin"]
+    assert [event.actor for event in events] == ["admin", "admin"]
     assert [event.outcome for event in events] == ["success", "success"]
     assert [event.request_id for event in events] == ["req-kill-1", "req-kill-2"]
     assert [dict(event.details) for event in events] == [
