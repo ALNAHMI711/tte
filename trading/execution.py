@@ -4,8 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .config import settings
+from .kill_switch import KillSwitch
 from .paper import PaperBroker, PaperOrder
-from .risk import RiskContext, RiskLimits, validate_order
+from .risk import RiskContext, RiskLimits, RiskRejected, validate_order
 
 
 @dataclass(frozen=True)
@@ -17,9 +18,14 @@ class OrderRequest:
 
 
 class ExecutionEngine:
-    def __init__(self, limits: RiskLimits | None = None) -> None:
+    def __init__(
+        self,
+        limits: RiskLimits | None = None,
+        kill_switch: KillSwitch | None = None,
+    ) -> None:
         self.limits = limits or RiskLimits()
         self.paper = PaperBroker()
+        self.kill_switch = kill_switch or KillSwitch()
 
     def submit(
         self,
@@ -27,13 +33,16 @@ class ExecutionEngine:
         context: RiskContext,
         symbol_info: object | None = None,
     ) -> PaperOrder:
-        """Validate risk and exchange filters before any paper order is created.
+        """Validate hard safety gates before any order is created.
 
-        ``symbol_info`` is optional for backward compatibility with the original
-        paper-only foundation. Production exchange paths must provide the
-        provider-normalized symbol metadata so quantity, price, and notional are
-        checked against the exchange filters before routing.
+        The kill switch blocks only new orders; it never liquidates existing
+        positions. ``symbol_info`` is optional for backward compatibility with
+        the original paper-only foundation.
         """
+        kill_state = self.kill_switch.snapshot()
+        if kill_state.enabled:
+            raise RiskRejected(f"kill switch is active: {kill_state.reason}")
+
         final_quantity = request.quantity
         final_price = request.price
         if symbol_info is not None:
