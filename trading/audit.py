@@ -4,7 +4,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any
+from typing import Any, Protocol
+
+
+class AuditPersistence(Protocol):
+    """Durable sink contract for audit events."""
+
+    def append(self, event: "AuditEvent") -> int:
+        """Persist an event and return its durable sequence number."""
 
 
 @dataclass(frozen=True)
@@ -43,23 +50,27 @@ class AuditEvent:
 
 
 class AuditLog:
-    """Thread-safe bounded event store for the control-plane foundation.
+    """Thread-safe bounded audit cache with an optional durable persistence sink.
 
-    The store intentionally keeps only security metadata. Production deployments
-    should replace it with durable, access-controlled storage without changing the
-    ``record``/``snapshot`` contract.
+    If a persistence sink is configured, it is written before the in-memory cache
+    so a persistence failure never produces a locally successful audit record.
+    Production callers should treat a persistence exception as an operational
+    failure rather than silently falling back to memory-only logging.
     """
 
-    def __init__(self, max_events: int = 1000) -> None:
+    def __init__(self, max_events: int = 1000, persistence: AuditPersistence | None = None) -> None:
         if max_events <= 0:
             raise ValueError("max_events must be positive")
         self.max_events = max_events
+        self.persistence = persistence
         self._lock = Lock()
         self._events: list[AuditEvent] = []
 
     def record(self, event: AuditEvent) -> AuditEvent:
         if not isinstance(event, AuditEvent):
             raise TypeError("event must be an AuditEvent")
+        if self.persistence is not None:
+            self.persistence.append(event)
         with self._lock:
             self._events.append(event)
             if len(self._events) > self.max_events:
