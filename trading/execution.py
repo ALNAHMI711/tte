@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .binance_preflight import BinancePreflightReport
 from .config import settings
 from .kill_switch import KillSwitch
 from .paper import PaperBroker, PaperOrder
@@ -22,10 +23,12 @@ class ExecutionEngine:
         self,
         limits: RiskLimits | None = None,
         kill_switch: KillSwitch | None = None,
+        live_preflight: BinancePreflightReport | None = None,
     ) -> None:
         self.limits = limits or RiskLimits()
         self.paper = PaperBroker()
         self.kill_switch = kill_switch or KillSwitch()
+        self.live_preflight = live_preflight
 
     def submit(
         self,
@@ -37,11 +40,20 @@ class ExecutionEngine:
 
         The kill switch blocks only new orders; it never liquidates existing
         positions. ``symbol_info`` is optional for backward compatibility with
-        the original paper-only foundation.
+        the original paper-only foundation. LIVE mode additionally requires a
+        previously evaluated, passing Binance preflight report. Live order
+        routing remains intentionally unavailable until a real exchange adapter
+        is implemented and separately tested.
         """
         kill_state = self.kill_switch.snapshot()
         if kill_state.enabled:
             raise RiskRejected(f"kill switch is active: {kill_state.reason}")
+
+        if settings.live_trading:
+            if self.live_preflight is None:
+                raise RuntimeError("LIVE execution requires a completed Binance preflight")
+            if not self.live_preflight.passed:
+                raise RiskRejected("LIVE execution blocked by failed Binance preflight")
 
         final_quantity = request.quantity
         final_price = request.price
