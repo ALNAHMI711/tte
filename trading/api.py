@@ -7,7 +7,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .audit import AuditEvent, AuditLog
+from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
@@ -58,12 +58,14 @@ def create_app(
     health: HealthChecker | None = None,
     kill_switch: KillSwitch | None = None,
     audit_log: AuditLog | None = None,
+    audit_store: AuditPersistence | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
     switch = kill_switch or KillSwitch()
-    log = audit_log or AuditLog()
+    log = audit_log or AuditLog(persistence=audit_store)
     app.state.audit_log = log
+    app.state.audit_store = audit_store
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
