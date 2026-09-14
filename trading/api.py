@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
+from .binance_readiness import BinanceReadinessStatus
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
 from .kill_switch import KillSwitch
@@ -61,6 +62,7 @@ def create_app(
     audit_log: AuditLog | None = None,
     audit_store: AuditPersistence | None = None,
     public_ip_client: PublicIPClient | None = None,
+    binance_readiness: BinanceReadinessStatus | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
@@ -70,6 +72,7 @@ def create_app(
     app.state.audit_log = log
     app.state.audit_store = audit_store
     app.state.public_ip_client = ip_client
+    app.state.binance_readiness = binance_readiness
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -121,7 +124,6 @@ def create_app(
             return _json_error(403, "csrf_failed")
         token = request.cookies.get(SESSION_COOKIE.name, "")
         user_id, password = await _credentials(request)
-        # user_id is ignored deliberately: the authenticated session is the authority.
         del user_id
         result = auth.step_up(token, password, request_id=request.headers.get("x-request-id", ""))
         if not result.authenticated or result.session is None:
@@ -154,6 +156,15 @@ def create_app(
         except PublicIPError:
             return _json_error(503, "server_ip_unavailable")
         return JSONResponse({"ip": result.ip, "source": result.source, "trusted_ip_ready": True})
+
+    @app.get("/control/binance-readiness")
+    def binance_readiness_status(request: Request) -> JSONResponse:
+        """Expose an injected, read-only Binance readiness snapshot to the control plane."""
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        if binance_readiness is None:
+            return _json_error(503, "binance_readiness_unavailable")
+        return JSONResponse(binance_readiness.to_dict())
 
     @app.get("/control/kill-switch")
     def kill_switch_status(request: Request) -> JSONResponse:
