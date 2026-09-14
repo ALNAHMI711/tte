@@ -21,10 +21,9 @@ def make_auth():
 
 def make_status():
     preflight = BinancePreflightReport(
-        passed=True,
         checks=(
-            PreflightCheck("live_requested", PreflightStatus.PASS),
-            PreflightCheck("api_key_configured", PreflightStatus.PASS),
+            PreflightCheck("live_requested", PreflightStatus.PASS, "LIVE explicitly requested"),
+            PreflightCheck("api_key", PreflightStatus.PASS, "API key is configured"),
         ),
     )
     connectivity = BinanceConnectivityResult(
