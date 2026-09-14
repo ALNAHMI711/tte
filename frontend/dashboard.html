@@ -22,11 +22,36 @@
     <header class="top"><div><h1>منصة TTE للتداول</h1><div class="sub">لوحة تحكم سحابية — التداول الحقيقي مقفل افتراضياً</div></div><span id="mode" class="badge">جارٍ الفحص…</span></header>
     <section id="cards" class="grid"></section>
     <section class="card wide">
+      <div class="name">جاهزية Binance</div>
+      <div id="binance-readiness" class="status wait">🟡 جارٍ الفحص…</div>
+      <div id="binance-readiness-detail" class="meta"><span>حالة LIVE</span><b>مقفلة</b></div>
+    </section>
+    <section class="card wide">
       <div class="notice">🛡️ طبقة الأمان: لا يمكن للذكاء الاصطناعي أو Telegram أو الاستراتيجيات تجاوز محرك المخاطر. LIVE لا يُفعّل إلا بعد اجتياز فحوص الأمان والاتصال والصلاحيات وعنوان IP الموثوق.</div>
       <button onclick="location.href='/login.html'">تسجيل الخروج / العودة للدخول</button>
     </section>
   </main>
 <script>
+function setReadiness(text, detail, className){
+  const status=document.getElementById('binance-readiness');
+  status.textContent=text;
+  status.className='status '+className;
+  document.getElementById('binance-readiness-detail').innerHTML=`<span>حالة LIVE</span><b>${detail}</b>`;
+}
+
+async function loadReadiness(){
+  try{
+    const r=await fetch('/control/binance-readiness',{credentials:'same-origin'});
+    if(r.status===401){location.href='/login.html';return}
+    if(r.status===503){setReadiness('🟡 غير مكتملة','مقفلة','wait');return}
+    if(!r.ok){setReadiness('⚠️ تعذر الفحص','مقفلة','off');return}
+    const d=await r.json();
+    setReadiness(d.ready?'🟢 جاهزة بعد اجتياز البوابات':'🟡 غير مكتملة',d.live_enabled?'مفعّلة':'مقفلة',d.ready?'ok':'wait');
+  }catch(_){
+    setReadiness('⚠️ تعذر الاتصال','مقفلة','off');
+  }
+}
+
 async function load(){
   const r=await fetch('/dashboard/status',{credentials:'same-origin'});
   if(r.status===401){location.href='/login.html';return}
@@ -34,6 +59,7 @@ async function load(){
   const d=await r.json(); document.getElementById('mode').textContent=d.mode==='PAPER'?'🟢 PAPER':'🔴 '+d.mode;
   const cards=d.adapters.map(x=>`<article class="card"><div class="name">${x.name}</div><div class="status ${x.enabled?'ok':'off'}">${x.enabled?'🟢 متاح':'🔴 غير متاح'}</div><div class="value">${x.balance}</div><div class="meta"><span>صفقات: ${x.trades}</span><span>PnL: ${x.pnl}</span></div></article>`).join('');
   document.getElementById('cards').innerHTML=cards+`<article class="card wide"><div class="name">حدود المخاطر الحالية</div><div class="meta"><span>مخاطرة الصفقة</span><b>${d.risk.per_trade_pct}%</b></div><div class="meta"><span>الخسارة اليومية</span><b>${d.risk.daily_loss_pct}%</b></div><div class="meta"><span>أقصى صفقات مفتوحة</span><b>${d.risk.max_open}</b></div><div class="meta"><span>الحد الأدنى للتقييم</span><b>${d.risk.min_score}</b></div></article>`;
+  await loadReadiness();
 }
 load(); setInterval(load,15000);
 </script>
