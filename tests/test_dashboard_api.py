@@ -100,6 +100,26 @@ def test_dashboard_status_exposes_shared_kill_switch_state():
     assert data["kill_switch_reason"] == "operator requested stop"
 
 
+def test_logout_revokes_authenticated_session():
+    client = make_client()
+    csrf_token = login_and_csrf(client)
+
+    before = client.get("/control/session")
+    assert before.status_code == 200
+    assert before.json()["authenticated"] is True
+
+    logout = client.post("/logout", headers={"x-csrf-token": csrf_token})
+    assert logout.status_code == 200
+    assert logout.json() == {"authenticated": False}
+
+    after = client.get("/control/session")
+    assert after.status_code == 401
+    assert after.json()["error"] == "authentication_required"
+
+    dashboard = client.get("/dashboard.html")
+    assert dashboard.status_code == 401
+
+
 def test_kill_switch_control_requires_authentication():
     client = make_client()
     response = client.post("/control/kill-switch", json={"enabled": True, "reason": "stop"})
