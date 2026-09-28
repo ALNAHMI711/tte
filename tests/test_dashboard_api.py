@@ -37,6 +37,32 @@ def step_up(client: TestClient, csrf_token: str):
     )
 
 
+def test_login_page_is_public_and_served():
+    client = make_client()
+    response = client.get("/login.html")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<html" in response.text.lower()
+
+
+def test_dashboard_page_requires_authenticated_session():
+    client = make_client()
+    response = client.get("/dashboard.html")
+    assert response.status_code == 401
+    assert response.json()["error"] == "authentication_required"
+
+
+def test_dashboard_page_is_served_after_authentication():
+    client = make_client()
+    login = client.post("/login", json={"user_id": "admin", "password": PASSWORD})
+    assert login.status_code == 200
+
+    response = client.get("/dashboard.html")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<html" in response.text.lower()
+
+
 def test_dashboard_status_requires_authenticated_session():
     client = make_client()
     response = client.get("/dashboard/status")
