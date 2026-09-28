@@ -25,6 +25,14 @@ def _json_error(status: int, code: str) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": code})
 
 
+def _credentials_from_data(data: object) -> tuple[str, str]:
+    if not isinstance(data, dict):
+        return "", ""
+    user_id = data.get("user_id", data.get("username", ""))
+    password = data.get("password", "")
+    return (user_id, password) if isinstance(user_id, str) and isinstance(password, str) else ("", "")
+
+
 async def _credentials(request: Request) -> tuple[str, str]:
     """Accept JSON and browser urlencoded forms without logging request bodies."""
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -40,11 +48,7 @@ async def _credentials(request: Request) -> tuple[str, str]:
         except UnicodeDecodeError:
             return "", ""
         data = {key: values.get(key, [""])[0] for key in ("user_id", "password")}
-    if not isinstance(data, dict):
-        return "", ""
-    user_id = data.get("user_id", data.get("username", ""))
-    password = data.get("password", "")
-    return (user_id, password) if isinstance(user_id, str) and isinstance(password, str) else ("", "")
+    return _credentials_from_data(data)
 
 
 def _csrf_valid(request: Request) -> bool:
@@ -101,14 +105,14 @@ def create_app(
         response.set_cookie(CSRF_COOKIE, token, secure=True, httponly=False, samesite="lax", path="/")
         return response
 
-    @app.get("/login.html")
+    @app.get("/login.html", response_model=None)
     def login_page() -> FileResponse | JSONResponse:
         page = _frontend_file("login.html")
         if page is None:
             return _json_error(404, "frontend_not_found")
         return FileResponse(page, media_type="text/html; charset=utf-8")
 
-    @app.get("/dashboard.html")
+    @app.get("/dashboard.html", response_model=None)
     def dashboard_page(request: Request) -> FileResponse | JSONResponse:
         if _authenticated_session(request, auth) is None:
             return _json_error(401, "authentication_required")
@@ -150,8 +154,7 @@ def create_app(
         if not _csrf_valid(request):
             return _json_error(403, "csrf_failed")
         token = request.cookies.get(SESSION_COOKIE.name, "")
-        user_id, password = await _credentials(request)
-        del user_id
+        _, password = await _credentials(request)
         result = auth.step_up(token, password, request_id=request.headers.get("x-request-id", ""))
         if not result.authenticated or result.session is None:
             return _json_error(401, "step_up_failed")
