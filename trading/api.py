@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
@@ -17,6 +18,7 @@ from .server_ip import PublicIPClient, PublicIPError
 
 SESSION_COOKIE = CookiePolicy()
 CSRF_COOKIE = "tte_csrf"
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 def _json_error(status: int, code: str) -> JSONResponse:
@@ -55,6 +57,15 @@ def _authenticated_session(request: Request, auth: AuthenticationService):
     return auth.sessions.get(request.cookies.get(SESSION_COOKIE.name, ""))
 
 
+def _frontend_file(name: str) -> Path | None:
+    candidate = (FRONTEND_DIR / name).resolve()
+    try:
+        candidate.relative_to(FRONTEND_DIR.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
 def create_app(
     auth: AuthenticationService,
     health: HealthChecker | None = None,
@@ -89,6 +100,22 @@ def create_app(
         response = JSONResponse({"csrf_token": token})
         response.set_cookie(CSRF_COOKIE, token, secure=True, httponly=False, samesite="lax", path="/")
         return response
+
+    @app.get("/login.html")
+    def login_page() -> FileResponse | JSONResponse:
+        page = _frontend_file("login.html")
+        if page is None:
+            return _json_error(404, "frontend_not_found")
+        return FileResponse(page, media_type="text/html; charset=utf-8")
+
+    @app.get("/dashboard.html")
+    def dashboard_page(request: Request) -> FileResponse | JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        page = _frontend_file("dashboard.html")
+        if page is None:
+            return _json_error(404, "frontend_not_found")
+        return FileResponse(page, media_type="text/html; charset=utf-8")
 
     @app.post("/login")
     async def login(request: Request) -> JSONResponse:
