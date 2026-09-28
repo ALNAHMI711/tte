@@ -4,13 +4,37 @@
 <body>
 <main>
 <h1>TTE</h1>
-<form method="post" action="/login" autocomplete="off">
+<form id="login-form" method="post" action="/login" autocomplete="off">
 <label for="user_id">اسم المستخدم</label>
 <input id="user_id" name="user_id" type="text" required autocomplete="username" inputmode="text">
 <label for="password">كلمة المرور</label>
 <input id="password" name="password" type="password" required minlength="12" autocomplete="current-password">
 <button type="submit">دخول</button>
+<div id="error" role="alert" aria-live="polite"></div>
 </form>
 </main>
+<script>
+document.getElementById('login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = document.getElementById('error');
+  error.textContent = '';
+  try {
+    const response = await fetch(form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'content-type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams(new FormData(form))
+    });
+    if (!response.ok) {
+      error.textContent = response.status === 429 ? 'تم تجاوز محاولات الدخول المسموحة، حاول لاحقاً.' : 'بيانات الدخول غير صحيحة.';
+      return;
+    }
+    window.location.assign('/dashboard.html');
+  } catch (_) {
+    error.textContent = 'تعذر الاتصال بالخادم.';
+  }
+});
+</script>
 </body>
 </html>
