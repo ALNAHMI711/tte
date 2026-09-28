@@ -28,7 +28,8 @@
     </section>
     <section class="card wide">
       <div class="notice">🛡️ طبقة الأمان: لا يمكن للذكاء الاصطناعي أو Telegram أو الاستراتيجيات تجاوز محرك المخاطر. LIVE لا يُفعّل إلا بعد اجتياز فحوص الأمان والاتصال والصلاحيات وعنوان IP الموثوق.</div>
-      <button onclick="location.href='/login.html'">تسجيل الخروج / العودة للدخول</button>
+      <button id="logout-button" type="button">تسجيل الخروج</button>
+      <div id="logout-error" class="status off" role="alert" aria-live="polite"></div>
     </section>
   </main>
 <script>
@@ -51,6 +52,30 @@ async function loadReadiness(){
     setReadiness('⚠️ تعذر الاتصال','مقفلة','off');
   }
 }
+
+async function logout(){
+  const error=document.getElementById('logout-error');
+  const button=document.getElementById('logout-button');
+  error.textContent='';
+  button.disabled=true;
+  try{
+    const csrf=await fetch('/csrf',{credentials:'same-origin'});
+    if(!csrf.ok){throw new Error('csrf')}
+    const data=await csrf.json();
+    const response=await fetch('/logout',{
+      method:'POST',
+      credentials:'same-origin',
+      headers:{'x-csrf-token':data.csrf_token}
+    });
+    if(!response.ok){throw new Error('logout')}
+    window.location.assign('/login.html');
+  }catch(_){
+    button.disabled=false;
+    error.textContent='تعذر تسجيل الخروج، حاول مرة أخرى.';
+  }
+}
+
+document.getElementById('logout-button').addEventListener('click', logout);
 
 async function load(){
   const r=await fetch('/dashboard/status',{credentials:'same-origin'});
