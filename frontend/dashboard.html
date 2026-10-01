@@ -24,7 +24,7 @@
     <section class="card wide">
       <div class="name">جاهزية Binance</div>
       <div id="binance-readiness" class="status wait">🟡 جارٍ الفحص…</div>
-      <div id="binance-readiness-detail" class="meta"><span>حالة LIVE</span><b>مقفلة</b></div>
+      <div id="binance-readiness-detail" class="meta">حالة LIVE: مقفلة</div>
     </section>
     <section class="card wide">
       <div class="notice">🛡️ طبقة الأمان: لا يمكن للذكاء الاصطناعي أو Telegram أو الاستراتيجيات تجاوز محرك المخاطر. LIVE لا يُفعّل إلا بعد اجتياز فحوص الأمان والاتصال والصلاحيات وعنوان IP الموثوق.</div>
@@ -33,11 +33,18 @@
     </section>
   </main>
 <script>
+function element(tag, className, text){
+  const node=document.createElement(tag);
+  if(className) node.className=className;
+  if(text!==undefined) node.textContent=String(text);
+  return node;
+}
+
 function setReadiness(text, detail, className){
   const status=document.getElementById('binance-readiness');
   status.textContent=text;
   status.className='status '+className;
-  document.getElementById('binance-readiness-detail').innerHTML=`<span>حالة LIVE</span><b>${detail}</b>`;
+  document.getElementById('binance-readiness-detail').textContent='حالة LIVE: '+detail;
 }
 
 async function loadReadiness(){
@@ -77,16 +84,52 @@ async function logout(){
 
 document.getElementById('logout-button').addEventListener('click', logout);
 
-async function load(){
-  const r=await fetch('/dashboard/status',{credentials:'same-origin'});
-  if(r.status===401){location.href='/login.html';return}
-  if(!r.ok){document.getElementById('mode').textContent='⚠️ خطأ';return}
-  const d=await r.json(); document.getElementById('mode').textContent=d.mode==='PAPER'?'🟢 PAPER':'🔴 '+d.mode;
-  const cards=d.adapters.map(x=>`<article class="card"><div class="name">${x.name}</div><div class="status ${x.enabled?'ok':'off'}">${x.enabled?'🟢 متاح':'🔴 غير متاح'}</div><div class="value">${x.balance}</div><div class="meta"><span>صفقات: ${x.trades}</span><span>PnL: ${x.pnl}</span></div></article>`).join('');
-  document.getElementById('cards').innerHTML=cards+`<article class="card wide"><div class="name">حدود المخاطر الحالية</div><div class="meta"><span>مخاطرة الصفقة</span><b>${d.risk.per_trade_pct}%</b></div><div class="meta"><span>الخسارة اليومية</span><b>${d.risk.daily_loss_pct}%</b></div><div class="meta"><span>أقصى صفقات مفتوحة</span><b>${d.risk.max_open}</b></div><div class="meta"><span>الحد الأدنى للتقييم</span><b>${d.risk.min_score}</b></div></article>`;
-  await loadReadiness();
+function renderDashboard(d){
+  const cards=document.getElementById('cards');
+  cards.replaceChildren();
+  for(const adapter of d.adapters||[]){
+    const card=element('article','card');
+    card.append(
+      element('div','name',adapter.name??'—'),
+      element('div','status '+(adapter.enabled?'ok':'off'),adapter.enabled?'🟢 متاح':'🔴 غير متاح'),
+      element('div','value',adapter.balance??'—')
+    );
+    const meta=element('div','meta');
+    meta.append(element('span','', 'صفقات: '+(adapter.trades??'—')),element('span','', 'PnL: '+(adapter.pnl??'—')));
+    card.append(meta);
+    cards.append(card);
+  }
+  const risk=element('article','card wide');
+  risk.append(element('div','name','حدود المخاطر الحالية'));
+  const rows=[
+    ['مخاطرة الصفقة',(d.risk?.per_trade_pct??'—')+'%'],
+    ['الخسارة اليومية',(d.risk?.daily_loss_pct??'—')+'%'],
+    ['أقصى صفقات مفتوحة',d.risk?.max_open??'—'],
+    ['الحد الأدنى للتقييم',d.risk?.min_score??'—']
+  ];
+  for(const [label,value] of rows){
+    const row=element('div','meta');
+    row.append(element('span','',label),element('b','',value));
+    risk.append(row);
+  }
+  cards.append(risk);
 }
-load(); setInterval(load,15000);
+
+async function load(){
+  try{
+    const r=await fetch('/dashboard/status',{credentials:'same-origin'});
+    if(r.status===401){location.href='/login.html';return}
+    if(!r.ok){document.getElementById('mode').textContent='⚠️ خطأ';return}
+    const d=await r.json();
+    document.getElementById('mode').textContent=d.mode==='PAPER'?'🟢 PAPER':'🔴 '+String(d.mode??'غير معروف');
+    renderDashboard(d);
+    await loadReadiness();
+  }catch(_){
+    document.getElementById('mode').textContent='⚠️ تعذر الاتصال';
+  }
+}
+load();
+setInterval(load,15000);
 </script>
 </body>
 </html>
