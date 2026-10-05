@@ -161,3 +161,21 @@ def test_kill_switch_audit_persists_and_chain_verifies(tmp_path):
         assert dict(event.details) == {"enabled": "True", "reason_present": "True"}
         assert "integration test" not in str(event.details)
         assert store.verify_chain() is True
+
+
+
+def test_market_stream_requires_authentication():
+    client = make_client()
+    with client.websocket_connect("/market/stream?symbol=BTCUSDT&timeframe=1m") as websocket:
+        message = websocket.receive()
+        assert message["type"] == "websocket.close"
+        assert message["code"] == 1008
+
+
+def test_market_stream_rejects_invalid_timeframe_after_authentication():
+    client = make_client()
+    assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+    with client.websocket_connect("/market/stream?symbol=BTCUSDT&timeframe=invalid") as websocket:
+        message = websocket.receive()
+        assert message["type"] == "websocket.close"
+        assert message["code"] == 1008
