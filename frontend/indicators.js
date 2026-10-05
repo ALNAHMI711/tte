@@ -109,13 +109,6 @@ export function stochastic(candles, period = 14, smooth = 3) {
 
 export function roc(values, period=12){if(period<1)throw new RangeError("period must be positive");const out=Array(values.length).fill(null);for(let i=period;i<values.length;i++)out[i]=values[i-period]===0?null:100*(values[i]-values[i-period])/values[i-period];return out}
 
-export const INDICATOR_CATALOG = Object.freeze([...INDICATOR_CATALOG,
-  {id:"ema100",name:"EMA 100",kind:"overlay"},{id:"ema200",name:"EMA 200",kind:"overlay"},
-  {id:"adx14",name:"ADX 14",kind:"oscillator"},{id:"stochastic14",name:"Stochastic 14",kind:"oscillator"},
-  {id:"roc12",name:"ROC 12",kind:"oscillator"}
-]);
-
-
 export const INDICATOR_CATALOG = Object.freeze([
   { id: "sma20", name: "SMA 20", kind: "overlay" },
   { id: "ema20", name: "EMA 20", kind: "overlay" },
