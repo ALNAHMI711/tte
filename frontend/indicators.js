@@ -20,7 +20,22 @@ export function ema(values, period) {
   out[period - 1] = previous;
   const alpha = 2 / (period + 1);
   for (let i = period; i < values.length; i++) {
-    previous = (values[i] - previous) * alpha + previous;
+    previous += (values[i] - previous) * alpha;
+    out[i] = previous;
+  }
+  return out;
+}
+
+export function rma(values, period) {
+  if (period < 1) throw new RangeError("period must be positive");
+  const out = Array(values.length).fill(null);
+  if (values.length < period) return out;
+  let previous = 0;
+  for (let i = 0; i < period; i++) previous += values[i];
+  previous /= period;
+  out[period - 1] = previous;
+  for (let i = period; i < values.length; i++) {
+    previous = ((previous * (period - 1)) + values[i]) / period;
     out[i] = previous;
   }
   return out;
@@ -58,14 +73,19 @@ export function vwap(candles) {
   return out;
 }
 
+function trueRanges(candles) {
+  return candles.map((c, i) => i === 0
+    ? c.high - c.low
+    : Math.max(c.high - c.low, Math.abs(c.high - candles[i - 1].close), Math.abs(c.low - candles[i - 1].close)));
+}
+
 export function atr(candles, period = 14) {
   if (period < 1) throw new RangeError("period must be positive");
-  const tr = candles.map((c, i) => i === 0 ? c.high - c.low :
-    Math.max(c.high - c.low, Math.abs(c.high - candles[i - 1].close), Math.abs(c.low - candles[i - 1].close)));
-  return ema(tr, period);
+  return rma(trueRanges(candles), period);
 }
 
 export function macd(values, fast = 12, slow = 26, signal = 9) {
+  if (fast < 1 || slow < 1 || signal < 1) throw new RangeError("periods must be positive");
   const fastEma = ema(values, fast), slowEma = ema(values, slow);
   const line = values.map((_, i) => fastEma[i] !== null && slowEma[i] !== null ? fastEma[i] - slowEma[i] : null);
   const compact = line.filter(v => v !== null);
@@ -76,16 +96,40 @@ export function macd(values, fast = 12, slow = 26, signal = 9) {
   return { line, signal: signalLine, histogram: line.map((v, i) => v === null || signalLine[i] === null ? null : v - signalLine[i]) };
 }
 
-export function adx(candles, period=14){
-  if(period<1) throw new RangeError("period must be positive");
-  const tr=[],plus=[],minus=[]; for(let i=0;i<candles.length;i++){
-    if(i===0){tr.push(candles[i].high-candles[i].low);plus.push(0);minus.push(0);continue}
-    const c=candles[i],p=candles[i-1]; tr.push(Math.max(c.high-c.low,Math.abs(c.high-p.close),Math.abs(c.low-p.close)));
-    const up=c.high-p.high,down=p.low-c.low; plus.push(up>down&&up>0?up:0);minus.push(down>up&&down>0?down:0);
+export function adx(candles, period = 14) {
+  if (period < 1) throw new RangeError("period must be positive");
+  const tr = trueRanges(candles);
+  const plusDm = Array(candles.length).fill(0);
+  const minusDm = Array(candles.length).fill(0);
+
+  for (let i = 1; i < candles.length; i++) {
+    const up = candles[i].high - candles[i - 1].high;
+    const down = candles[i - 1].low - candles[i].low;
+    if (up > down && up > 0) plusDm[i] = up;
+    else if (down > up && down > 0) minusDm[i] = down;
   }
-  const atrv=ema(tr,period), p=ema(plus,period),m=ema(minus,period),dx=Array(candles.length).fill(null),out=Array(candles.length).fill(null);
-  for(let i=0;i<candles.length;i++){if(atrv[i]==null||atrv[i]===0)continue;const pi=100*p[i]/atrv[i],mi=100*m[i]/atrv[i];const s=pi+mi;dx[i]=s===0?0:100*Math.abs(pi-mi)/s}
-  const compact=dx.filter(v=>v!==null),a=ema(compact,period);let j=0;for(let i=0;i<dx.length;i++)if(dx[i]!==null)out[i]=a[j++];return out;
+
+  const smoothedTr = rma(tr, period);
+  const smoothedPlus = rma(plusDm, period);
+  const smoothedMinus = rma(minusDm, period);
+  const dx = Array(candles.length).fill(null);
+
+  for (let i = period - 1; i < candles.length; i++) {
+    if (smoothedTr[i] === null || smoothedTr[i] === 0) continue;
+    const plusDi = 100 * smoothedPlus[i] / smoothedTr[i];
+    const minusDi = 100 * smoothedMinus[i] / smoothedTr[i];
+    const sum = plusDi + minusDi;
+    dx[i] = sum === 0 ? 0 : 100 * Math.abs(plusDi - minusDi) / sum;
+  }
+
+  const validDx = dx.slice(period - 1).filter(v => v !== null);
+  const adxValues = rma(validDx, period);
+  const out = Array(candles.length).fill(null);
+  let j = 0;
+  for (let i = period - 1; i < candles.length; i++) {
+    if (dx[i] !== null) out[i] = adxValues[j++];
+  }
+  return out;
 }
 
 export function stochastic(candles, period = 14, smooth = 3) {
@@ -99,15 +143,24 @@ export function stochastic(candles, period = 14, smooth = 3) {
     }
     raw[i] = hi === lo ? 0 : 100 * (candles[i].close - lo) / (hi - lo);
   }
-  const out = Array(candles.length).fill(null);
   const valid = raw.filter(v => v !== null);
   const smoothed = sma(valid, smooth);
+  const out = Array(candles.length).fill(null);
   let j = 0;
-  for (let i = 0; i < raw.length; i++) if (raw[i] !== null) out[i] = smoothed[j++];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] !== null) out[i] = smoothed[j++];
+  }
   return out;
 }
 
-export function roc(values, period=12){if(period<1)throw new RangeError("period must be positive");const out=Array(values.length).fill(null);for(let i=period;i<values.length;i++)out[i]=values[i-period]===0?null:100*(values[i]-values[i-period])/values[i-period];return out}
+export function roc(values, period = 12) {
+  if (period < 1) throw new RangeError("period must be positive");
+  const out = Array(values.length).fill(null);
+  for (let i = period; i < values.length; i++) {
+    out[i] = values[i - period] === 0 ? null : 100 * (values[i] - values[i - period]) / values[i - period];
+  }
+  return out;
+}
 
 export const INDICATOR_CATALOG = Object.freeze([
   { id: "sma20", name: "SMA 20", kind: "overlay" },
