@@ -271,7 +271,9 @@ def create_app(
                         continue
         except WebSocketDisconnect:
             return
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
+            raise
+        except Exception:
             try:
                 await websocket.close(code=1011, reason="market_stream_unavailable")
             except Exception:
