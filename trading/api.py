@@ -115,6 +115,15 @@ def create_app(
             return _json_error(404, "frontend_not_found")
         return FileResponse(page, media_type="text/html; charset=utf-8")
 
+    @app.get("/chart.html", response_model=None)
+    def chart_page(request: Request) -> FileResponse | JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        page = _frontend_file("chart.html")
+        if page is None:
+            return _json_error(404, "frontend_not_found")
+        return FileResponse(page, media_type="text/html; charset=utf-8")
+
     @app.get("/dashboard.html", response_model=None)
     def dashboard_page(request: Request) -> FileResponse | JSONResponse:
         if _authenticated_session(request, auth) is None:
