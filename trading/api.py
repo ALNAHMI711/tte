@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
+from .binance_market import BinanceMarketClient, BinanceMarketError
 from .binance_readiness import BinanceReadinessStatus
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
@@ -78,6 +79,7 @@ def create_app(
     audit_store: AuditPersistence | None = None,
     public_ip_client: PublicIPClient | None = None,
     binance_readiness: BinanceReadinessStatus | None = None,
+    market_client: BinanceMarketClient | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
@@ -88,6 +90,7 @@ def create_app(
     app.state.audit_store = audit_store
     app.state.public_ip_client = ip_client
     app.state.binance_readiness = binance_readiness
+    app.state.market_client = market_client or BinanceMarketClient()
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -108,6 +111,15 @@ def create_app(
     @app.get("/login.html", response_model=None)
     def login_page() -> FileResponse | JSONResponse:
         page = _frontend_file("login.html")
+        if page is None:
+            return _json_error(404, "frontend_not_found")
+        return FileResponse(page, media_type="text/html; charset=utf-8")
+
+    @app.get("/chart.html", response_model=None)
+    def chart_page(request: Request) -> FileResponse | JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        page = _frontend_file("chart.html")
         if page is None:
             return _json_error(404, "frontend_not_found")
         return FileResponse(page, media_type="text/html; charset=utf-8")
@@ -195,6 +207,22 @@ def create_app(
         if binance_readiness is None:
             return _json_error(503, "binance_readiness_unavailable")
         return JSONResponse(binance_readiness.to_dict())
+
+    @app.get("/market/candles")
+    def market_candles(request: Request, symbol: str = "BTCUSDT", timeframe: str = "1m", limit: int = 200) -> JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        symbol, timeframe = symbol.strip().upper(), timeframe.strip()
+        if not symbol or len(symbol) > 30 or not timeframe or len(timeframe) > 10 or not 1 <= limit <= 1000:
+            return _json_error(400, "invalid_market_request")
+        try:
+            candles = app.state.market_client.candles(symbol, timeframe, limit)
+        except ValueError:
+            return _json_error(400, "invalid_market_request")
+        except BinanceMarketError:
+            return _json_error(503, "market_data_unavailable")
+        return JSONResponse({"symbol": symbol, "timeframe": timeframe, "environment": "TESTNET",
+            "candles": [{"time": int(c.timestamp.timestamp()), "open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume} for c in candles]})
 
     @app.get("/control/kill-switch")
     def kill_switch_status(request: Request) -> JSONResponse:
