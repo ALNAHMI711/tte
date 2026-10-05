@@ -88,10 +88,23 @@ export function adx(candles, period=14){
   const compact=dx.filter(v=>v!==null),a=ema(compact,period);let j=0;for(let i=0;i<dx.length;i++)if(dx[i]!==null)out[i]=a[j++];return out;
 }
 
-export function stochastic(candles, period=14, smooth=3){
-  if(period<1||smooth<1)throw new RangeError("periods must be positive");const k=Array(candles.length).fill(null);
-  for(let i=period-1;i<candles.length;i++){let hi=-Infinity,lo=Infinity;for(let j=i-period+1;j<=i;j++){hi=Math.max(hi,candles[j].high);lo=Math.min(lo,candles[j].low)}k[i]=hi===lo?0:100*(candles[i].close-lo)/(hi-lo)}
-  return sma(k.filter(v=>v!==null),smooth).map((v,i)=>v); // compact %K smoothing; preserves calculation API
+export function stochastic(candles, period = 14, smooth = 3) {
+  if (period < 1 || smooth < 1) throw new RangeError("periods must be positive");
+  const raw = Array(candles.length).fill(null);
+  for (let i = period - 1; i < candles.length; i++) {
+    let hi = -Infinity, lo = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      hi = Math.max(hi, candles[j].high);
+      lo = Math.min(lo, candles[j].low);
+    }
+    raw[i] = hi === lo ? 0 : 100 * (candles[i].close - lo) / (hi - lo);
+  }
+  const out = Array(candles.length).fill(null);
+  const valid = raw.filter(v => v !== null);
+  const smoothed = sma(valid, smooth);
+  let j = 0;
+  for (let i = 0; i < raw.length; i++) if (raw[i] !== null) out[i] = smoothed[j++];
+  return out;
 }
 
 export function roc(values, period=12){if(period<1)throw new RangeError("period must be positive");const out=Array(values.length).fill(null);for(let i=period;i<values.length;i++)out[i]=values[i-period]===0?null:100*(values[i]-values[i-period])/values[i-period];return out}
