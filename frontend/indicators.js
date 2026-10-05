@@ -76,17 +76,6 @@ export function macd(values, fast = 12, slow = 26, signal = 9) {
   return { line, signal: signalLine, histogram: line.map((v, i) => v === null || signalLine[i] === null ? null : v - signalLine[i]) };
 }
 
-export const INDICATOR_CATALOG = Object.freeze([
-  { id: "sma20", name: "SMA 20", kind: "overlay" },
-  { id: "ema20", name: "EMA 20", kind: "overlay" },
-  { id: "ema50", name: "EMA 50", kind: "overlay" },
-  { id: "vwap", name: "VWAP", kind: "overlay" },
-  { id: "rsi14", name: "RSI 14", kind: "oscillator" },
-  { id: "atr14", name: "ATR 14", kind: "oscillator" },
-  { id: "macd", name: "MACD 12/26/9", kind: "oscillator" }
-]);
-
-
 export function adx(candles, period=14){
   if(period<1) throw new RangeError("period must be positive");
   const tr=[],plus=[],minus=[]; for(let i=0;i<candles.length;i++){
@@ -111,4 +100,20 @@ export const INDICATOR_CATALOG = Object.freeze([...INDICATOR_CATALOG,
   {id:"ema100",name:"EMA 100",kind:"overlay"},{id:"ema200",name:"EMA 200",kind:"overlay"},
   {id:"adx14",name:"ADX 14",kind:"oscillator"},{id:"stochastic14",name:"Stochastic 14",kind:"oscillator"},
   {id:"roc12",name:"ROC 12",kind:"oscillator"}
+]);
+
+
+export const INDICATOR_CATALOG = Object.freeze([
+  { id: "sma20", name: "SMA 20", kind: "overlay" },
+  { id: "ema20", name: "EMA 20", kind: "overlay" },
+  { id: "ema50", name: "EMA 50", kind: "overlay" },
+  { id: "ema100", name: "EMA 100", kind: "overlay" },
+  { id: "ema200", name: "EMA 200", kind: "overlay" },
+  { id: "vwap", name: "VWAP", kind: "overlay" },
+  { id: "rsi14", name: "RSI 14", kind: "oscillator" },
+  { id: "atr14", name: "ATR 14", kind: "oscillator" },
+  { id: "macd", name: "MACD 12/26/9", kind: "oscillator" },
+  { id: "adx14", name: "ADX 14", kind: "oscillator" },
+  { id: "stochastic14", name: "Stochastic 14", kind: "oscillator" },
+  { id: "roc12", name: "ROC 12", kind: "oscillator" },
 ]);
