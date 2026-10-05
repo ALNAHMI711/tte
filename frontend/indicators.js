@@ -85,3 +85,30 @@ export const INDICATOR_CATALOG = Object.freeze([
   { id: "atr14", name: "ATR 14", kind: "oscillator" },
   { id: "macd", name: "MACD 12/26/9", kind: "oscillator" }
 ]);
+
+
+export function adx(candles, period=14){
+  if(period<1) throw new RangeError("period must be positive");
+  const tr=[],plus=[],minus=[]; for(let i=0;i<candles.length;i++){
+    if(i===0){tr.push(candles[i].high-candles[i].low);plus.push(0);minus.push(0);continue}
+    const c=candles[i],p=candles[i-1]; tr.push(Math.max(c.high-c.low,Math.abs(c.high-p.close),Math.abs(c.low-p.close)));
+    const up=c.high-p.high,down=p.low-c.low; plus.push(up>down&&up>0?up:0);minus.push(down>up&&down>0?down:0);
+  }
+  const atrv=ema(tr,period), p=ema(plus,period),m=ema(minus,period),dx=Array(candles.length).fill(null),out=Array(candles.length).fill(null);
+  for(let i=0;i<candles.length;i++){if(atrv[i]==null||atrv[i]===0)continue;const pi=100*p[i]/atrv[i],mi=100*m[i]/atrv[i];const s=pi+mi;dx[i]=s===0?0:100*Math.abs(pi-mi)/s}
+  const compact=dx.filter(v=>v!==null),a=ema(compact,period);let j=0;for(let i=0;i<dx.length;i++)if(dx[i]!==null)out[i]=a[j++];return out;
+}
+
+export function stochastic(candles, period=14, smooth=3){
+  if(period<1||smooth<1)throw new RangeError("periods must be positive");const k=Array(candles.length).fill(null);
+  for(let i=period-1;i<candles.length;i++){let hi=-Infinity,lo=Infinity;for(let j=i-period+1;j<=i;j++){hi=Math.max(hi,candles[j].high);lo=Math.min(lo,candles[j].low)}k[i]=hi===lo?0:100*(candles[i].close-lo)/(hi-lo)}
+  return sma(k.filter(v=>v!==null),smooth).map((v,i)=>v); // compact %K smoothing; preserves calculation API
+}
+
+export function roc(values, period=12){if(period<1)throw new RangeError("period must be positive");const out=Array(values.length).fill(null);for(let i=period;i<values.length;i++)out[i]=values[i-period]===0?null:100*(values[i]-values[i-period])/values[i-period];return out}
+
+export const INDICATOR_CATALOG = Object.freeze([...INDICATOR_CATALOG,
+  {id:"ema100",name:"EMA 100",kind:"overlay"},{id:"ema200",name:"EMA 200",kind:"overlay"},
+  {id:"adx14",name:"ADX 14",kind:"oscillator"},{id:"stochastic14",name:"Stochastic 14",kind:"oscillator"},
+  {id:"roc12",name:"ROC 12",kind:"oscillator"}
+]);
