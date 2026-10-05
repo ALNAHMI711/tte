@@ -1,9 +1,9 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TTE — الرسم البياني</title><style>body{margin:0;background:#07101d;color:#e8eef7;font-family:system-ui}.wrap{max-width:1200px;margin:auto;padding:12px}.top{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.c{background:#0d1829;color:#fff;border:1px solid #26364e;border-radius:10px;padding:9px}#chart{height:70vh;min-height:380px;margin-top:10px;border:1px solid #1d2b40;border-radius:14px;overflow:hidden}.status{font-size:12px;color:#91a0b5;margin:9px 0}a{color:#b9c7d9;margin-inline-start:auto}</style></head><body><main class="wrap"><div class="top"><b>ALNAHMI Trading Terminal</b><input id="symbol" class="c" value="BTCUSDT"><select id="timeframe" class="c"><option>1m</option><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option></select><select id="indicator" class="c"><option value="none">بدون مؤشر</option><option value="ema20">EMA 20</option><option value="ema50">EMA 50</option><option value="sma20">SMA 20</option><option value="vwap">VWAP</option><option value="rsi14">RSI 14</option><option value="atr14">ATR 14</option></select><button id="load" class="c">تحميل</button><select id="drawing" class="c" aria-label="أداة الرسم"><option value="select">تحديد</option><option value="trend">خط اتجاه</option><option value="horizontal">خط أفقي</option><option value="vertical">خط عمودي</option><option value="box">مربع</option></select><button id="clearDrawings" class="c">مسح الرسومات</button><button id="saveDrawings" class="c">حفظ</button><button id="restoreDrawings" class="c">استعادة</button><a href="/dashboard.html">العودة</a></div><div id="status" class="status">قراءة فقط — Binance Spot Testnet</div><div id="chart"></div></main><script type="module">
 import{createChart,CandlestickSeries,LineSeries,HistogramSeries,ColorType,CrosshairMode}from"https://unpkg.com/lightweight-charts@5.2.1/dist/lightweight-charts.production.mjs";
-import{sma,ema,rsi,vwap,atr,macd,adx,stochastic,roc}from"./indicators.js";
+import{INDICATOR_REGISTRY,INDICATOR_LIST}from"./indicator-registry.js";
 import{DrawingManager}from"./drawings.js";
 const host=document.getElementById("chart"),status=document.getElementById("status"),indicator=document.getElementById("indicator");
-indicator.innerHTML='<option value="none">بدون مؤشر</option><option value="ema20">EMA 20</option><option value="ema50">EMA 50</option><option value="ema100">EMA 100</option><option value="ema200">EMA 200</option><option value="sma20">SMA 20</option><option value="vwap">VWAP</option><option value="rsi14">RSI 14</option><option value="atr14">ATR 14</option><option value="macd">MACD 12/26/9</option><option value="adx14">ADX 14</option><option value="stochastic14">Stochastic 14</option><option value="roc12">ROC 12</option>';
+indicator.innerHTML='<option value="none">بدون مؤشر</option>'+INDICATOR_LIST.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join("");
 const chart=createChart(host,{layout:{background:{type:ColorType.Solid,color:"#0b1424"},textColor:"#cbd5e1"},grid:{vertLines:{color:"#172337"},horzLines:{color:"#172337"}},crosshair:{mode:CrosshairMode.Normal},timeScale:{timeVisible:true,secondsVisible:false}});
 const candles=chart.addSeries(CandlestickSeries,{upColor:"#55d88a",downColor:"#f07f7f",borderVisible:false,wickUpColor:"#55d88a",wickDownColor:"#f07f7f"});
 let rows=[],series=[];
@@ -12,20 +12,17 @@ function clearIndicator(){for(const s of series)chart.removeSeries(s);series=[];
 function line(data,pane=0,options={}){const s=chart.addSeries(LineSeries,{lineWidth:2,priceLineVisible:false,lastValueVisible:false,...options},pane);s.setData(data);series.push(s);return s}
 function aligned(values){return rows.map((x,i)=>values[i]==null?null:{time:x.time,value:values[i]}).filter(Boolean)}
 function redraw(){
- clearIndicator();const id=indicator.value;if(id==="none")return;
- const close=rows.map(x=>x.close);
- if(id==="ema20")return line(aligned(ema(close,20)));
- if(id==="ema50")return line(aligned(ema(close,50)));
- if(id==="ema100")return line(aligned(ema(close,100)));
- if(id==="ema200")return line(aligned(ema(close,200)));
- if(id==="sma20")return line(aligned(sma(close,20)));
- if(id==="vwap")return line(aligned(vwap(rows)));
- if(id==="rsi14")return line(aligned(rsi(close,14)),1,{title:"RSI 14",autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100}})});
- if(id==="atr14")return line(aligned(atr(rows,14)),1,{title:"ATR 14"});
- if(id==="adx14")return line(aligned(adx(rows,14)),1,{title:"ADX 14",autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100}})});
- if(id==="stochastic14")return line(aligned(stochastic(rows,14,3)),1,{title:"Stochastic"});
- if(id==="roc12")return line(aligned(roc(close,12)),1,{title:"ROC 12"});
- if(id==="macd"){const m=macd(close,12,26,9);line(aligned(m.line),1,{title:"MACD"});line(aligned(m.signal),1,{title:"Signal"});const h=chart.addSeries(HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},1);h.setData(aligned(m.histogram));series.push(h)}
+ clearIndicator();const id=indicator.value;if(id==="none"||!rows.length)return;
+ const def=INDICATOR_REGISTRY[id];if(!def)return;const result=def.calculate(rows);
+ const aligned=v=>alignedValues(v);
+ const alignedValues=values=>rows.map((x,i)=>values[i]==null?null:{time:x.time,value:values[i]}).filter(Boolean);
+ if(def.multi){
+   line(aligned(result.line),1,{title:"MACD"});
+   line(aligned(result.signal),1,{title:"Signal"});
+   const h=chart.addSeries(HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},1);
+   h.setData(aligned(result.histogram));series.push(h);return;
+ }
+ line(aligned(result),def.kind==="oscillator"?1:0,{title:def.name,...(def.min!=null?{autoscaleInfoProvider:()=>({priceRange:{minValue:def.min,maxValue:def.max}})}:{})});
 }
 async function load(){try{const s=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;const r=await fetch("/market/candles?symbol="+encodeURIComponent(s)+"&timeframe="+encodeURIComponent(tf)+"&limit=300");if(r.status===401){location.href="/login.html";return}if(!r.ok)throw Error();const d=await r.json();rows=d.candles||[];candles.setData(rows);redraw();chart.timeScale().fitContent();status.textContent=d.symbol+" • "+d.timeframe+" • Testnet • قراءة فقط"}catch(_){status.textContent="تعذر تحميل بيانات السوق"}}
 document.getElementById("load").onclick=load;indicator.onchange=redraw;document.getElementById("drawing").onchange=e=>drawings.setMode(e.target.value);
