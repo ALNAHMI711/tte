@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi import WebSocket, WebSocketDisconnect
+from websockets.asyncio.client import connect as websocket_connect
 
 from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
@@ -223,6 +226,56 @@ def create_app(
             return _json_error(503, "market_data_unavailable")
         return JSONResponse({"symbol": symbol, "timeframe": timeframe, "environment": "TESTNET",
             "candles": [{"time": int(c.timestamp.timestamp()), "open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume} for c in candles]})
+
+    @app.websocket("/market/stream")
+    async def market_stream(websocket: WebSocket) -> None:
+        if _authenticated_session(websocket, auth) is None:
+            await websocket.close(code=1008, reason="authentication_required")
+            return
+        symbol = websocket.query_params.get("symbol", "BTCUSDT").strip().upper()
+        timeframe = websocket.query_params.get("timeframe", "1m").strip()
+        allowed = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d"}
+        if not symbol or len(symbol) > 30 or timeframe not in allowed:
+            await websocket.close(code=1008, reason="invalid_market_request")
+            return
+        await websocket.accept()
+        url = f"wss://stream.testnet.binance.vision/ws/{symbol.lower()}@kline_{timeframe}"
+        try:
+            async with websocket_connect(url, open_timeout=5, close_timeout=2, ping_interval=20) as upstream:
+                while True:
+                    message = await upstream.recv()
+                    if isinstance(message, bytes):
+                        message = message.decode("utf-8")
+                    try:
+                        payload = json.loads(message)
+                        k = payload.get("k", {})
+                        if not isinstance(k, dict):
+                            continue
+                        normalized = {
+                            "stream": "kline",
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "environment": "TESTNET",
+                            "closed": bool(k.get("x", False)),
+                            "candle": {
+                                "time": int(k["t"]) // 1000,
+                                "open": float(k["o"]),
+                                "high": float(k["h"]),
+                                "low": float(k["l"]),
+                                "close": float(k["c"]),
+                                "volume": float(k["v"]),
+                            },
+                        }
+                        await websocket.send_json(normalized)
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        continue
+        except WebSocketDisconnect:
+            return
+        except (asyncio.CancelledError, Exception):
+            try:
+                await websocket.close(code=1011, reason="market_stream_unavailable")
+            except Exception:
+                pass
 
     @app.get("/control/kill-switch")
     def kill_switch_status(request: Request) -> JSONResponse:
