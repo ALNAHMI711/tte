@@ -6,7 +6,7 @@ const host=document.getElementById("chart"),status=document.getElementById("stat
 indicator.innerHTML='<option value="none">بدون مؤشر</option>'+INDICATOR_LIST.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join("");
 const chart=createChart(host,{layout:{background:{type:ColorType.Solid,color:"#0b1424"},textColor:"#cbd5e1"},grid:{vertLines:{color:"#172337"},horzLines:{color:"#172337"}},crosshair:{mode:CrosshairMode.Normal},timeScale:{timeVisible:true,secondsVisible:false}});
 const candles=chart.addSeries(CandlestickSeries,{upColor:"#55d88a",downColor:"#f07f7f",borderVisible:false,wickUpColor:"#55d88a",wickDownColor:"#f07f7f"});
-let rows=[],series=[];
+let rows=[],series=[];let redrawTimer=0;
 const drawings=new DrawingManager(chart,host);
 function clearIndicator(){for(const s of series)chart.removeSeries(s);series=[];const panes=chart.panes();for(let i=panes.length-1;i>0;i--)chart.removePane(i)}
 function line(data,pane=0,options={}){const s=chart.addSeries(LineSeries,{lineWidth:2,priceLineVisible:false,lastValueVisible:false,...options},pane);s.setData(data);series.push(s);return s}
@@ -32,7 +32,7 @@ function connectStream(){
  const proto=location.protocol==="https:"?"wss":"ws";
  marketSocket=new WebSocket(proto+"://"+location.host+"/market/stream?symbol="+encodeURIComponent(symbol)+"&timeframe="+encodeURIComponent(tf));
  marketSocket.onopen=()=>{status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط"};
- marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const i=rows.findIndex(x=>x.time===c.time);if(i>=0)rows[i]=c;else rows.push(c);candles.update(c);redraw()}catch(_){}}; 
+ marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const i=rows.findIndex(x=>x.time===c.time);if(i>=0)rows[i]=c;else rows.push(c);candles.update(c);if(redrawTimer)return;redrawTimer=requestAnimationFrame(()=>{redrawTimer=0;redraw()})}catch(_){}}; 
  marketSocket.onclose=()=>{if(document.visibilityState!=="hidden")status.textContent="انقطع البث اللحظي — بيانات محفوظة من آخر تحميل"};
 }
 document.getElementById("load").onclick=async()=>{await load();connectStream()};indicator.onchange=redraw;document.getElementById("drawing").onchange=e=>drawings.setMode(e.target.value);
@@ -40,5 +40,8 @@ document.getElementById("clearDrawings").onclick=()=>drawings.clear();
 function storageKey(){return"tte.drawings."+document.getElementById("symbol").value.trim().toUpperCase()+"."+document.getElementById("timeframe").value}
 document.getElementById("saveDrawings").onclick=()=>localStorage.setItem(storageKey(),JSON.stringify(drawings.serialize()));
 document.getElementById("restoreDrawings").onclick=()=>{try{drawings.restore(JSON.parse(localStorage.getItem(storageKey())||"[]"))}catch(_){drawings.clear()}};
+const rerenderDrawings=()=>drawings.render();
+chart.timeScale().subscribeVisibleLogicalRangeChange(rerenderDrawings);
+chart.subscribeCrosshairMove(rerenderDrawings);
 new ResizeObserver(()=>{chart.applyOptions({width:host.clientWidth,height:host.clientHeight});drawings.render()}).observe(host);load();
 </script></body></html>
