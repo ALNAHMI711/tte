@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07101d">
+  <title>TTE — الرسم البياني</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#07101d;color:#e8eef7}
+    *{box-sizing:border-box}body{margin:0;background:#07101d}
+    .wrap{max-width:1200px;margin:auto;padding:12px}.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    h1{font-size:18px;margin:0 12px 0 0}.control{background:#0d1829;border:1px solid #22334b;color:#e8eef7;border-radius:10px;padding:9px}
+    button{cursor:pointer;font-weight:700}.status{font-size:12px;color:#91a0b5;margin:10px 0}
+    #chart{height:68vh;min-height:420px;border:1px solid #1d2b40;border-radius:14px;overflow:hidden;background:#0b1424}
+    .back{margin-inline-start:auto;text-decoration:none;color:#b9c7d9}
+    @media(max-width:600px){#chart{height:62vh;min-height:360px}.top{align-items:stretch}.control{flex:1;min-width:90px}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <h1>ALNAHMI Trading Terminal</h1>
+    <input id="symbol" class="control" value="BTCUSDT" maxlength="30" aria-label="الرمز">
+    <select id="timeframe" class="control" aria-label="الفاصل الزمني">
+      <option>1m</option><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option>
+    </select>
+    <button id="load" class="control" type="button">تحميل</button>
+    <a class="back" href="/dashboard.html">العودة للوحة</a>
+  </header>
+  <div id="status" class="status">جارٍ تحميل بيانات السوق الآمنة…</div>
+  <div id="chart" aria-label="مخطط الشموع"></div>
+</main>
+<script type="module">
+import { createChart, CandlestickSeries, ColorType, CrosshairMode } from "https://unpkg.com/lightweight-charts@5.2.1/dist/lightweight-charts.production.mjs";
+
+const host=document.getElementById("chart");
+const status=document.getElementById("status");
+const chart=createChart(host,{
+  layout:{background:{type:ColorType.Solid,color:"#0b1424"},textColor:"#cbd5e1"},
+  grid:{vertLines:{color:"#172337"},horzLines:{color:"#172337"}},
+  crosshair:{mode:CrosshairMode.Normal},
+  rightPriceScale:{borderColor:"#26364e"},
+  timeScale:{borderColor:"#26364e",timeVisible:true,secondsVisible:false}
+});
+const series=chart.addSeries(CandlestickSeries,{
+  upColor:"#55d88a",downColor:"#f07f7f",borderVisible:false,
+  wickUpColor:"#55d88a",wickDownColor:"#f07f7f"
+});
+
+async function load(){
+  const symbol=document.getElementById("symbol").value.trim().toUpperCase();
+  const timeframe=document.getElementById("timeframe").value;
+  status.textContent="جارٍ التحميل…";
+  try{
+    const r=await fetch("/market/candles?symbol="+encodeURIComponent(symbol)+"&timeframe="+encodeURIComponent(timeframe)+"&limit=300",{credentials:"same-origin"});
+    if(r.status===401){location.href="/login.html";return}
+    if(!r.ok) throw new Error("market");
+    const d=await r.json();
+    series.setData((d.candles||[]).map(x=>({time:x.time,open:x.open,high:x.high,low:x.low,close:x.close})));
+    chart.timeScale().fitContent();
+    status.textContent="السوق: "+d.symbol+" • "+d.timeframe+" • المصدر: Binance Spot Testnet • قراءة فقط";
+  }catch(_){status.textContent="تعذر تحميل بيانات السوق. التداول الحقيقي غير متاح من هذه الشاشة."}
+}
+document.getElementById("load").addEventListener("click",load);
+new ResizeObserver(()=>chart.applyOptions({width:host.clientWidth,height:host.clientHeight})).observe(host);
+load();
+</script>
+</body>
+</html>
