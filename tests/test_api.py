@@ -180,3 +180,21 @@ def test_market_stream_rejects_invalid_timeframe_after_authentication():
         with client.websocket_connect("/market/stream?symbol=BTCUSDT&timeframe=invalid"):
             pass
     assert getattr(exc.value, "code", None) == 1008
+
+
+@pytest.mark.parametrize("symbol", ["BTC-USDT", "BTC/USDT", "BTC USDT", "btc.usdt", "BTC%20USDT"])
+def test_market_candles_rejects_malformed_symbol(symbol):
+    client = make_client()
+    assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+    response = client.get(f"/market/candles?symbol={symbol}&timeframe=1m&limit=10")
+    assert response.status_code == 400
+    assert response.json() == {"error": "invalid_market_request"}
+
+
+def test_market_stream_rejects_malformed_symbol_after_authentication():
+    client = make_client()
+    assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+    with pytest.raises(Exception) as exc:
+        with client.websocket_connect("/market/stream?symbol=BTC-USDT&timeframe=1m"):
+            pass
+    assert getattr(exc.value, "code", None) == 1008
