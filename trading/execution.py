@@ -16,6 +16,7 @@ class OrderRequest:
     side: str
     quantity: float
     price: float
+    client_order_id: str | None = None
 
 
 class ExecutionEngine:
@@ -72,7 +73,15 @@ class ExecutionEngine:
             final_price = float(normalized.price)
 
         notional = final_quantity * final_price
-        validate_order(\n            notional,\n            self.limits,\n            context,\n            account_equity=account_equity,\n            entry_price=final_price,\n            stop_loss_price=stop_loss_price,\n            quantity=final_quantity,\n        )
+        validate_order(
+            notional,
+            self.limits,
+            context,
+            account_equity=account_equity,
+            entry_price=final_price,
+            stop_loss_price=stop_loss_price,
+            quantity=final_quantity,
+        )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
         if not settings.paper_trading:
@@ -82,4 +91,5 @@ class ExecutionEngine:
             request.side,
             final_quantity,
             final_price,
+            request.client_order_id,
         )
