@@ -51,9 +51,20 @@ class PaperBroker:
         if quantity <= 0 or price <= 0:
             raise ValueError("quantity and price must be positive")
         if client_order_id:
-            existing = self._by_client_id.get(client_order_id)
-            if existing is not None:
-                return existing
+            client_order_id = client_order_id.strip()
+            if not client_order_id:
+                client_order_id = None
+            else:
+                existing = self._by_client_id.get(client_order_id)
+                if existing is not None:
+                    if (
+                        existing.symbol != symbol
+                        or existing.side != side
+                        or existing.quantity != quantity
+                        or existing.price != price
+                    ):
+                        raise ValueError("client_order_id is already bound to a different order")
+                    return existing
 
         if side == "sell":
             current = self._positions.get(symbol)
