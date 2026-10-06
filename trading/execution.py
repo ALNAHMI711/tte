@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .adapters import TradingEnvironment, enforce_safe_account
 
 from .binance_preflight import BinancePreflightReport
 from .config import settings
@@ -43,6 +42,8 @@ class ExecutionEngine:
         stop_loss_price: float | None = None,
         market_prices: dict[str, float] | None = None,
     ) -> PaperOrder:
+        from .adapters import TradingEnvironment, enforce_safe_account
+
         """Route adapter market data through filters/risk into Paper only.
 
         This method deliberately never calls adapter.submit_order. A
