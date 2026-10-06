@@ -54,3 +54,24 @@ def test_sqlite_repository_enforces_client_order_id_uniqueness(tmp_path):
 
     assert repository.load_orders() == (_order("one", "same"),)
     repository.close()
+
+
+def test_paper_broker_accepts_repository_injection(tmp_path):
+    from trading.paper import PaperBroker
+
+    repository = SQLitePaperLedgerRepository.open(str(tmp_path / "paper.sqlite"))
+    broker = PaperBroker(repository=repository)
+    order = broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="injected")
+    assert broker.order_by_client_id("injected") is order
+    assert broker.position("BTCUSDT").quantity == 1
+    broker.close()
+
+
+def test_paper_broker_rejects_path_and_repository_together(tmp_path):
+    repository = SQLitePaperLedgerRepository.open(str(tmp_path / "repository.sqlite"))
+
+    with pytest.raises(ValueError, match="either persistence_path or repository"):
+        from trading.paper import PaperBroker
+        PaperBroker(str(tmp_path / "paper.sqlite"), repository=repository)
+
+    repository.close()
