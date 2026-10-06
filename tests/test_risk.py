@@ -79,3 +79,40 @@ def test_risk_checks_stop_direction_without_equity():
             10, RiskLimits(), RiskContext(),
             entry_price=100, stop_loss_price=110, quantity=0.1, side="buy",
         )
+
+
+def test_risk_rejects_signal_below_minimum():
+    import pytest
+    with pytest.raises(RiskRejected, match="signal score"):
+        validate_order(10, RiskLimits(), RiskContext(), signal_score=84)
+
+
+def test_risk_rejects_reward_risk_below_minimum():
+    import pytest
+    with pytest.raises(RiskRejected, match="reward-risk"):
+        validate_order(10, RiskLimits(), RiskContext(), reward_risk_ratio=1.99)
+
+
+def test_risk_rejects_max_open_positions_for_new_exposure():
+    import pytest
+    with pytest.raises(RiskRejected, match="open positions"):
+        validate_order(
+            10, RiskLimits(max_open_positions=5),
+            RiskContext(open_positions=5),
+            exposure_delta=10,
+        )
+
+
+def test_risk_allows_exposure_reduction_at_position_limit():
+    validate_order(
+        10, RiskLimits(max_open_positions=5),
+        RiskContext(open_positions=5, open_exposure=20),
+        side="sell",
+        exposure_delta=-10,
+    )
+
+
+def test_risk_rejects_invalid_position_limit():
+    import pytest
+    with pytest.raises(ValueError, match="max_open_positions"):
+        RiskLimits(max_open_positions=0)
