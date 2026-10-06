@@ -138,6 +138,7 @@ def test_kill_switch_audit_persists_and_chain_verifies(tmp_path):
             base_url="https://testserver",
         )
         assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
+        csrf = client.get("/csrf").json()["csrf_token"]
         assert client.post(
             "/control/step-up",
             json={"user_id": "admin", "password": PASSWORD},
