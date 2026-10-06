@@ -15,10 +15,10 @@ function redraw(){
  const def=INDICATOR_REGISTRY[id];if(!def)return;const result=def.calculate(rows);
  const alignedValues=values=>rows.map((x,i)=>values[i]==null?null:{time:x.time,value:values[i]}).filter(Boolean);
  if(def.multi){
-   line(aligned(result.line),1,{title:"MACD"});
-   line(aligned(result.signal),1,{title:"Signal"});
+   line(alignedValues(result.line),1,{title:"MACD"});
+   line(alignedValues(result.signal),1,{title:"Signal"});
    const h=chart.addSeries(HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},1);
-   h.setData(aligned(result.histogram));series.push(h);return;
+   h.setData(alignedValues(result.histogram));series.push(h);return;
  }
  line(aligned(result),def.kind==="oscillator"?1:0,{title:def.name,...(def.min!=null?{autoscaleInfoProvider:()=>({priceRange:{minValue:def.min,maxValue:def.max}})}:{})});
 }
