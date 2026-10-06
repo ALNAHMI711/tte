@@ -110,3 +110,25 @@ def test_execution_preserves_context_emergency_stop_gate() -> None:
             OrderRequest("BTC/USDT", "buy", 0.01, 1000),
             RiskContext(emergency_stop=True),
         )
+
+
+def test_execution_enforces_half_percent_risk_budget_when_stop_is_supplied():
+    engine = ExecutionEngine()
+    with pytest.raises(RiskRejected, match="risk-per-trade"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(),
+            account_equity=1000,
+            stop_loss_price=900,
+        )
+
+
+def test_execution_accepts_order_within_half_percent_risk_budget():
+    engine = ExecutionEngine()
+    order = engine.submit(
+        OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+        RiskContext(),
+        account_equity=1000,
+        stop_loss_price=950,
+    )
+    assert order.status == "FILLED"
