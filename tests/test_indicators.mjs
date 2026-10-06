@@ -53,3 +53,13 @@ test("latestPoint skips warmup nulls and preserves candle time",()=>{
   assert.deepEqual(latestPoint([{time:1},{time:2},{time:3}], [null, 4, null]), {time:2,value:4});
   assert.equal(latestPoint([{time:1}], [null]), null);
 });
+
+
+test("mergeCandles deduplicates, replaces, sorts, and caps", async () => {
+  const { mergeCandles } = await import("../frontend/indicator-data.js");
+  const existing = [{time:3,close:30},{time:1,close:10},{time:2,close:20}];
+  const incoming = [{time:2,close:25},{time:4,close:40},{time:5,close:50}];
+  assert.deepEqual(mergeCandles(existing,incoming,4), [
+    {time:2,close:25},{time:3,close:30},{time:4,close:40},{time:5,close:50}
+  ]);
+});
