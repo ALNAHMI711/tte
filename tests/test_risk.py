@@ -146,3 +146,10 @@ def test_risk_accepts_risk_per_trade_at_exact_budget():
         account_equity=1000, entry_price=100, stop_loss_price=90,
         quantity=1, side="buy",
     )
+
+
+def test_risk_rejection_exposes_stable_code():
+    import pytest
+    with pytest.raises(RiskRejected) as exc_info:
+        validate_order(101, RiskLimits(), RiskContext())
+    assert exc_info.value.code == "MAX_ORDER_NOTIONAL"
