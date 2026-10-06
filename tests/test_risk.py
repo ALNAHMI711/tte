@@ -153,3 +153,24 @@ def test_risk_rejection_exposes_stable_code():
     with pytest.raises(RiskRejected) as exc_info:
         validate_order(101, RiskLimits(), RiskContext())
     assert exc_info.value.code == "MAX_ORDER_NOTIONAL"
+
+
+def test_risk_strict_mode_requires_signal():
+    import pytest
+    with pytest.raises(RiskRejected) as exc_info:
+        validate_order(10, RiskLimits(), RiskContext(), signal_score=None, strict=True)
+    assert exc_info.value.code == "MISSING_SIGNAL_SCORE"
+
+
+def test_risk_strict_mode_requires_reward_risk():
+    import pytest
+    with pytest.raises(RiskRejected) as exc_info:
+        validate_order(10, RiskLimits(), RiskContext(), reward_risk_ratio=None, strict=True)
+    assert exc_info.value.code == "MISSING_REWARD_RISK"
+
+
+def test_risk_strict_mode_requires_protective_inputs():
+    import pytest
+    with pytest.raises(RiskRejected) as exc_info:
+        validate_order(10, RiskLimits(), RiskContext(), strict=True)
+    assert exc_info.value.code == "MISSING_PROTECTIVE_INPUTS"
