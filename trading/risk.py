@@ -66,6 +66,7 @@ def validate_order(
     stop_loss_price: float | None = None,
     quantity: float | None = None,
     side: str | None = None,
+    exposure_delta: float | None = None,
 ) -> None:
     if ctx.emergency_stop:
         raise RiskRejected("emergency stop is active")
@@ -77,7 +78,10 @@ def validate_order(
         raise RiskRejected("daily loss limit reached")
     if ctx.weekly_loss >= limits.max_weekly_loss:
         raise RiskRejected("weekly loss limit reached")
-    if ctx.open_exposure + notional > limits.max_open_exposure:
+    projected_exposure = ctx.open_exposure + (notional if exposure_delta is None else exposure_delta)
+    if projected_exposure < 0:
+        raise RiskRejected("projected open exposure cannot be negative")
+    if projected_exposure > limits.max_open_exposure:
         raise RiskRejected("open exposure limit reached")
     if ctx.estimated_slippage_bps > limits.max_slippage_bps:
         raise RiskRejected("estimated slippage is too high")
