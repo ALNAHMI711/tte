@@ -264,13 +264,11 @@ class PaperBroker:
 
         A corrupt persistent row must never leave a live broker half-restored.
         """
-        assert self._connection is not None
+        assert self._repository is not None
 
         restored_orders: list[PaperOrder] = []
         restored_by_client_id: dict[str, PaperOrder] = {}
         restored_positions: dict[str, PaperPosition] = {}
-
-        assert self._repository is not None
 
         rows = self._repository.load_orders()
         for row in rows:
