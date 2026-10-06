@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .execution import ExecutionEngine
 from .risk import RiskContext
 from .strategy import RuntimeStrategy, StrategyContext
-from .strategy_catalog import build_order_request
+from .strategy_catalog import build_order_request_from_action
 
 
 @dataclass(frozen=True)
@@ -41,8 +41,8 @@ class StrategyRunner:
         symbol_info: object | None = None,
     ) -> StrategyRunResult:
         action = self.strategy.evaluate(context)
-        request = build_order_request(
-            self.strategy,
+        request = build_order_request_from_action(
+            action,
             context,
             quantity=quantity,
             price=price,
