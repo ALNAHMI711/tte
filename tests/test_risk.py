@@ -116,3 +116,33 @@ def test_risk_rejects_invalid_position_limit():
     import pytest
     with pytest.raises(ValueError, match="max_open_positions"):
         RiskLimits(max_open_positions=0)
+
+
+def test_risk_rejects_weekly_loss_limit():
+    import pytest
+    with pytest.raises(RiskRejected, match="weekly loss"):
+        validate_order(10, RiskLimits(max_weekly_loss=20), RiskContext(weekly_loss=20))
+
+
+def test_risk_rejects_correlation_exposure_limit():
+    import pytest
+    with pytest.raises(RiskRejected, match="correlation exposure"):
+        validate_order(10, RiskLimits(max_correlation_exposure=20), RiskContext(correlation_exposure=15))
+
+
+def test_risk_rejects_risk_per_trade_budget():
+    import pytest
+    with pytest.raises(RiskRejected, match="risk-per-trade"):
+        validate_order(
+            20, RiskLimits(risk_per_trade_pct=0.5), RiskContext(),
+            account_equity=1000, entry_price=100, stop_loss_price=90,
+            quantity=1, side="buy",
+        )
+
+
+def test_risk_accepts_risk_per_trade_at_exact_budget():
+    validate_order(
+        10, RiskLimits(risk_per_trade_pct=1.0), RiskContext(),
+        account_equity=1000, entry_price=100, stop_loss_price=90,
+        quantity=1, side="buy",
+    )
