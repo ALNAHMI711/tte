@@ -75,3 +75,18 @@ def test_paper_broker_rejects_path_and_repository_together(tmp_path):
         PaperBroker(str(tmp_path / "paper.sqlite"), repository=repository)
 
     repository.close()
+
+
+def test_postgres_repository_fails_clearly_without_driver(monkeypatch):
+    from trading.paper_repository import PostgresPaperLedgerRepository
+
+    real_import = __import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "psycopg":
+            raise ImportError("driver unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", blocked_import)
+    with pytest.raises(RuntimeError, match="requires the postgres dependency"):
+        PostgresPaperLedgerRepository.open("postgresql://invalid")
