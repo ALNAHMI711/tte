@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 import sqlite3
+from threading import RLock
 from uuid import uuid4
 
 
@@ -37,8 +38,11 @@ class PaperBroker:
         self._positions: dict[str, PaperPosition] = {}
         self._persistence_path = persistence_path
         self._connection: sqlite3.Connection | None = None
+        self._lock = RLock()
         if persistence_path:
-            self._connection = sqlite3.connect(persistence_path, timeout=5.0)
+            self._connection = sqlite3.connect(
+                persistence_path, timeout=5.0, check_same_thread=False
+            )
             self._connection.execute(
                 """CREATE TABLE IF NOT EXISTS paper_orders (
                     id TEXT PRIMARY KEY,
@@ -76,26 +80,89 @@ class PaperBroker:
             raise ValueError("quantity and price must be positive finite values")
 
         if client_order_id:
-            client_order_id = client_order_id.strip()
-            if not client_order_id:
-                client_order_id = None
-            else:
-                existing = self._by_client_id.get(client_order_id)
-                if existing is not None:
-                    if (
-                        existing.symbol != symbol
-                        or existing.side != side
-                        or existing.quantity != quantity
-                        or existing.price != price
-                    ):
-                        raise ValueError("client_order_id is already bound to a different order")
-                    return existing
+            client_order_id = client_order_id.strip() or None
 
-        if side == "sell":
-            current = self._positions.get(symbol)
-            if current is None or quantity > current.quantity:
-                raise ValueError("paper sell exceeds current position")
+        with self._lock:
+            if self._connection is None:
+                return self._submit_memory(
+                    symbol, side, quantity, price, client_order_id
+                )
 
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                self._reload_from_database()
+
+                if client_order_id:
+                    existing = self._by_client_id.get(client_order_id)
+                    if existing is not None:
+                        if (
+                            existing.symbol != symbol
+                            or existing.side != side
+                            or existing.quantity != quantity
+                            or existing.price != price
+                        ):
+                            raise ValueError(
+                                "client_order_id is already bound to a different order"
+                            )
+                        self._connection.rollback()
+                        return existing
+
+                self._validate_fill(symbol, side, quantity)
+                order = PaperOrder(
+                    symbol=symbol,
+                    side=side,
+                    quantity=quantity,
+                    price=price,
+                    client_order_id=client_order_id,
+                )
+                self._connection.execute(
+                    "INSERT INTO paper_orders "
+                    "(id, symbol, side, quantity, price, client_order_id, status) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        order.id,
+                        order.symbol,
+                        order.side,
+                        order.quantity,
+                        order.price,
+                        order.client_order_id,
+                        order.status,
+                    ),
+                )
+                self.orders.append(order)
+                if client_order_id:
+                    self._by_client_id[client_order_id] = order
+                self._apply_fill(order)
+                self._connection.commit()
+                return order
+            except Exception:
+                self._connection.rollback()
+                self._reload_from_database()
+                raise
+
+    def _submit_memory(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+        client_order_id: str | None,
+    ) -> PaperOrder:
+        if client_order_id:
+            existing = self._by_client_id.get(client_order_id)
+            if existing is not None:
+                if (
+                    existing.symbol != symbol
+                    or existing.side != side
+                    or existing.quantity != quantity
+                    or existing.price != price
+                ):
+                    raise ValueError(
+                        "client_order_id is already bound to a different order"
+                    )
+                return existing
+
+        self._validate_fill(symbol, side, quantity)
         order = PaperOrder(
             symbol=symbol,
             side=side,
@@ -103,30 +170,31 @@ class PaperBroker:
             price=price,
             client_order_id=client_order_id,
         )
-        if self._connection is not None:
-            self._connection.execute(
-                "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    order.id,
-                    order.symbol,
-                    order.side,
-                    order.quantity,
-                    order.price,
-                    order.client_order_id,
-                    order.status,
-                ),
-            )
-            self._connection.commit()
         self.orders.append(order)
         if client_order_id:
             self._by_client_id[client_order_id] = order
         self._apply_fill(order)
         return order
 
+    def _validate_fill(self, symbol: str, side: str, quantity: float) -> None:
+        if side == "sell":
+            current = self._positions.get(symbol)
+            if current is None or quantity > current.quantity:
+                raise ValueError("paper sell exceeds current position")
+
     def _restore(self) -> None:
+        with self._lock:
+            self._reload_from_database()
+
+    def _reload_from_database(self) -> None:
         assert self._connection is not None
+        self.orders.clear()
+        self._by_client_id.clear()
+        self._positions.clear()
+
         rows = self._connection.execute(
-            "SELECT id, symbol, side, quantity, price, client_order_id, status FROM paper_orders ORDER BY rowid"
+            "SELECT id, symbol, side, quantity, price, client_order_id, status "
+            "FROM paper_orders ORDER BY rowid"
         ).fetchall()
         for row in rows:
             order = PaperOrder(
@@ -153,10 +221,7 @@ class PaperBroker:
                 if order.client_order_id in self._by_client_id:
                     raise ValueError("paper ledger contains duplicate client order ids")
                 self._by_client_id[order.client_order_id] = order
-            if order.side == "sell":
-                current = self._positions.get(order.symbol)
-                if current is None or order.quantity > current.quantity:
-                    raise ValueError("paper ledger contains an invalid sell")
+            self._validate_fill(order.symbol, order.side, order.quantity)
             self.orders.append(order)
             self._apply_fill(order)
 
@@ -164,13 +229,18 @@ class PaperBroker:
         current = self._positions.get(order.symbol)
         if order.side == "buy":
             if current is None:
-                self._positions[order.symbol] = PaperPosition(order.symbol, order.quantity, order.price)
+                self._positions[order.symbol] = PaperPosition(
+                    order.symbol, order.quantity, order.price
+                )
                 return
             total_qty = current.quantity + order.quantity
             average = (
-                (current.quantity * current.average_price) + (order.quantity * order.price)
+                (current.quantity * current.average_price)
+                + (order.quantity * order.price)
             ) / total_qty
-            self._positions[order.symbol] = PaperPosition(order.symbol, total_qty, average)
+            self._positions[order.symbol] = PaperPosition(
+                order.symbol, total_qty, average
+            )
             return
 
         remaining = current.quantity - order.quantity if current else 0.0
@@ -185,14 +255,26 @@ class PaperBroker:
         normalized = client_order_id.strip()
         if not normalized:
             return None
-        return self._by_client_id.get(normalized)
+        with self._lock:
+            return self._by_client_id.get(normalized)
 
     def position(self, symbol: str) -> PaperPosition | None:
-        return self._positions.get(symbol.strip().upper())
+        with self._lock:
+            return self._positions.get(symbol.strip().upper())
 
     def positions(self) -> tuple[PaperPosition, ...]:
-        return tuple(sorted(self._positions.values(), key=lambda item: item.symbol))
+        with self._lock:
+            return tuple(
+                sorted(self._positions.values(), key=lambda item: item.symbol)
+            )
 
     def orders_for(self, symbol: str) -> tuple[PaperOrder, ...]:
         normalized = symbol.strip().upper()
-        return tuple(order for order in self.orders if order.symbol == normalized)
+        with self._lock:
+            return tuple(order for order in self.orders if order.symbol == normalized)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
