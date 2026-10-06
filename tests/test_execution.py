@@ -346,3 +346,42 @@ def test_execution_strict_risk_requires_stop_loss_before_paper_submission():
             reward_risk_ratio=REWARD_RISK,
         )
     assert engine.paper.orders == ()
+
+
+def test_execution_enforces_authoritative_max_open_positions():
+    from trading.risk import RiskLimits
+
+    engine = ExecutionEngine(limits=RiskLimits(max_open_positions=1))
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+
+    with pytest.raises(RiskRejected, match="maximum open positions"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "buy", 0.01, 1000),
+            RiskContext(),
+            market_prices={"BTCUSDT": 1000},
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
+        )
+    assert len(engine.paper.orders) == 1
+
+
+def test_execution_idempotency_cannot_bypass_missing_signal():
+    engine = ExecutionEngine()
+    request = OrderRequest("BTCUSDT", "buy", 0.01, 1000, client_order_id="strict-001")
+    first = engine.submit(
+        request,
+        RiskContext(),
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
+        stop_loss_price=STOP_LOSS,
+    )
+
+    with pytest.raises(RiskRejected, match="signal score"):
+        engine.submit(
+            request,
+            RiskContext(),
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
+        )
+    assert first.status == "FILLED"
