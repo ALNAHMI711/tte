@@ -85,7 +85,7 @@ class SmaCrossStrategy:
         slow = ema(closes, self.slow)
         if fast[index] is None or slow[index] is None:
             return Signal.HOLD
-        if fast[index] > slow[index] and (fast[index - 1] is None or fast[index - 1] <= slow[index - 1]):
+        if fast[index] > slow[index] and (fast[index - 1] is None or slow[index - 1] is None or fast[index - 1] <= slow[index - 1]):
             return Signal.LONG
         if fast[index] < slow[index]:
             return Signal.FLAT
@@ -105,8 +105,8 @@ class BacktestEngine:
         for candle in candles:
             if not all(isinstance(v, (int, float)) for v in (candle.open, candle.high, candle.low, candle.close, candle.volume)):
                 raise ValueError("candle values must be numeric")
-            if candle.close <= 0:
-                raise ValueError("candle close must be positive")
+            if candle.close <= 0 or candle.open <= 0:
+                raise ValueError("candle prices must be positive")
 
         cash = self.config.initial_cash
         quantity = 0.0
@@ -117,41 +117,24 @@ class BacktestEngine:
         peak = cash
         max_drawdown = 0.0
 
-        for index, candle in enumerate(candles):
-            signal = strategy.signal(candles, index)
-            if signal is Signal.LONG and quantity == 0:
-                execution_price = candle.close * (1 + self.config.slippage_bps / 10000)
-                allocation = cash * self.config.position_fraction
-                fee = allocation * self.config.fee_rate
-                spend = allocation
-                if spend + fee > cash:
-                    spend = cash / (1 + self.config.fee_rate)
-                    fee = spend * self.config.fee_rate
-                quantity = spend / execution_price
-                cash -= spend + fee
-                entry_price = execution_price
-                entry_time = candle.time
-                entry_fees = fee
-            elif signal is Signal.FLAT and quantity > 0:
-                execution_price = candle.close * (1 - self.config.slippage_bps / 10000)
-                proceeds = quantity * execution_price
-                fee = proceeds * self.config.fee_rate
-                cash += proceeds - fee
-                gross = quantity * (execution_price - entry_price)
-                total_fees = entry_fees + fee
-                trades.append(BacktestTrade(entry_time, candle.time, entry_price, execution_price, quantity, gross, total_fees, gross - total_fees))
-                quantity = 0.0
-                entry_price = 0.0
-                entry_fees = 0.0
+        def buy(candle: BacktestCandle) -> None:
+            nonlocal cash, quantity, entry_price, entry_time, entry_fees
+            execution_price = candle.open * (1 + self.config.slippage_bps / 10000)
+            allocation = cash * self.config.position_fraction
+            fee = allocation * self.config.fee_rate
+            spend = allocation
+            if spend + fee > cash:
+                spend = cash / (1 + self.config.fee_rate)
+                fee = spend * self.config.fee_rate
+            quantity = spend / execution_price
+            cash -= spend + fee
+            entry_price = execution_price
+            entry_time = candle.time
+            entry_fees = fee
 
-            equity = cash + quantity * candle.close
-            peak = max(peak, equity)
-            if peak > 0:
-                max_drawdown = max(max_drawdown, (peak - equity) / peak * 100)
-
-        if quantity > 0:
-            candle = candles[-1]
-            execution_price = candle.close * (1 - self.config.slippage_bps / 10000)
+        def sell(candle: BacktestCandle) -> None:
+            nonlocal cash, quantity, entry_price, entry_fees
+            execution_price = candle.open * (1 - self.config.slippage_bps / 10000)
             proceeds = quantity * execution_price
             fee = proceeds * self.config.fee_rate
             cash += proceeds - fee
@@ -159,6 +142,25 @@ class BacktestEngine:
             total_fees = entry_fees + fee
             trades.append(BacktestTrade(entry_time, candle.time, entry_price, execution_price, quantity, gross, total_fees, gross - total_fees))
             quantity = 0.0
+            entry_price = 0.0
+            entry_fees = 0.0
+
+        for index, candle in enumerate(candles):
+            if index < len(candles) - 1:
+                signal = strategy.signal(candles, index)
+                next_candle = candles[index + 1]
+                if signal is Signal.LONG and quantity == 0:
+                    buy(next_candle)
+                elif signal is Signal.FLAT and quantity > 0:
+                    sell(next_candle)
+
+            equity = cash + quantity * candle.close
+            peak = max(peak, equity)
+            if peak > 0:
+                max_drawdown = max(max_drawdown, (peak - equity) / peak * 100)
+
+        if quantity > 0:
+            sell(candles[-1])
 
         final_equity = cash
         net_pnl = final_equity - self.config.initial_cash
