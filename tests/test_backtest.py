@@ -44,3 +44,21 @@ def test_backtest_records_costs_and_drawdown():
     assert result.max_drawdown_pct >= 0
     assert all(trade.fees >= 0 for trade in result.trades)
     assert all(trade.net_pnl == trade.gross_pnl - trade.fees for trade in result.trades)
+
+
+def test_backtest_executes_signal_on_next_bar_open_not_signal_bar_close():
+    candles = [
+        BacktestCandle(0, 10, 10, 10, 10, 100),
+        BacktestCandle(1, 20, 20, 20, 20, 100),
+        BacktestCandle(2, 20, 20, 20, 20, 100),
+    ]
+
+    class BuyAtFirstClose:
+        name = "test"
+        def signal(self, candles, index):
+            return Signal.LONG if index == 0 else Signal.HOLD
+
+    result = BacktestEngine(BacktestConfig(initial_cash=1000, fee_rate=0)).run(candles, BuyAtFirstClose())
+    assert len(result.trades) == 1
+    assert result.trades[0].entry_time == 1
+    assert result.trades[0].entry_price == 20
