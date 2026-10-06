@@ -89,6 +89,27 @@ def test_paper_sqlite_ledger_rejects_corrupt_sell(tmp_path):
         PaperBroker(str(path))
 
 
+def test_paper_sqlite_refresh_keeps_last_valid_state_when_restore_fails(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="good")
+
+    broker._connection.execute(
+        "INSERT INTO paper_orders "
+        "(id, symbol, side, quantity, price, client_order_id, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("bad", "BTCUSDT", "sell", 2, 100, "bad", "FILLED"),
+    )
+    broker._connection.commit()
+
+    with pytest.raises(ValueError, match="invalid sell"):
+        broker.refresh()
+
+    assert len(broker.orders) == 1
+    assert broker.order_by_client_id("good") is not None
+    assert broker.position("BTCUSDT").quantity == 1
+
+
 def test_paper_sqlite_ledger_normalizes_restored_symbol_and_side(tmp_path):
     path = tmp_path / "paper.sqlite"
     broker = PaperBroker(str(path))
