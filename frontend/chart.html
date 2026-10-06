@@ -13,7 +13,6 @@ function line(data,pane=0,options={}){const s=chart.addSeries(LineSeries,{lineWi
 function redraw(){
  clearIndicator();lastRenderedTime=rows.length?rows[rows.length-1].time:null;const id=indicator.value;if(id==="none"||!rows.length)return;
  const def=INDICATOR_REGISTRY[id];if(!def)return;const result=def.calculate(rows);
- const aligned=v=>alignedValues(v);
  const alignedValues=values=>rows.map((x,i)=>values[i]==null?null:{time:x.time,value:values[i]}).filter(Boolean);
  if(def.multi){
    line(aligned(result.line),1,{title:"MACD"});
