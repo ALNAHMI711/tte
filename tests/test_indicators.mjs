@@ -117,3 +117,23 @@ test("indicator registry exposes every catalog entry with aligned output", async
     }
   }
 });
+
+
+test("drawing restore filters invalid entries and normalizes numeric coordinates", async () => {
+  const { DrawingManager } = await import("../frontend/drawings.js");
+  assert.ok(typeof DrawingManager === "function");
+  const manager = Object.create(DrawingManager.prototype);
+  manager.items = [];
+  manager.drag = null;
+  manager.render = () => {};
+  manager.restore([
+    { type: "trend", p1: { logical: "1", price: "10.5" }, p2: { logical: 2, price: 11 } },
+    { type: "hack", p1: { logical: 1, price: 1 }, p2: { logical: 2, price: 2 } },
+    { type: "box", p1: { logical: "bad", price: 1 }, p2: { logical: 2, price: 2 } },
+    null,
+  ]);
+  assert.deepEqual(manager.items, [
+    { type: "trend", p1: { logical: 1, price: 10.5 }, p2: { logical: 2, price: 11 } },
+  ]);
+  assert.equal(manager.drag, null);
+});
