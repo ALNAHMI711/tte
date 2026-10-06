@@ -2,7 +2,7 @@
 import{createChart,CandlestickSeries,LineSeries,ColorType,CrosshairMode}from"https://unpkg.com/lightweight-charts@5.2.1/dist/lightweight-charts.production.mjs";
 import{INDICATOR_REGISTRY,INDICATOR_LIST}from"./indicator-registry.js";
 import{renderIndicator,updateIndicator}from"./indicator-renderer.js";
-import{DrawingManager}from"./drawings.js";import{mergeCandles}from"./indicator-data.js";
+import{DrawingManager}from"./drawings.js";import{mergeCandle,mergeCandles}from"./indicator-data.js";
 const host=document.getElementById("chart"),status=document.getElementById("status"),indicator=document.getElementById("indicator");
 indicator.innerHTML='<option value="none">بدون مؤشر</option>'+INDICATOR_LIST.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join("");
 const chart=createChart(host,{layout:{background:{type:ColorType.Solid,color:"#0b1424"},textColor:"#cbd5e1"},grid:{vertLines:{color:"#172337"},horzLines:{color:"#172337"}},crosshair:{mode:CrosshairMode.Normal},timeScale:{timeVisible:true,secondsVisible:false}});
@@ -24,7 +24,7 @@ function connectStream(){
  const proto=location.protocol==="https:"?"wss":"ws";
  marketSocket=new WebSocket(proto+"://"+location.host+"/market/stream?symbol="+encodeURIComponent(symbol)+"&timeframe="+encodeURIComponent(tf));
  marketSocket.onopen=async()=>{status.textContent=symbol+" • "+tf+" • مزامنة بيانات السوق…";const synced=await load(generation,false);if(generation!==streamGeneration||!marketSocket)return;if(!synced){status.textContent="فشلت مزامنة البث — إعادة المحاولة…";marketSocket.close();return}reconnectDelay=1000;status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط"};
- marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const i=rows.findIndex(x=>x.time===c.time);if(i>=0)rows[i]=c;else rows.push(c);candles.update(c);if(redrawTimer)return;redrawTimer=requestAnimationFrame(()=>{redrawTimer=0;if(rows.length){if(i>=0&&i===rows.length-1)updateIndicator(INDICATOR_REGISTRY,indicator.value,rows,series);else redraw()}})}catch(_){}};
+ marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const previousLast=rows.length?rows[rows.length-1].time:null;const merged=mergeCandle(rows,c,300);rows=merged.rows;if(merged.isLatest&&Number(c.time)>=Number(previousLast??-Infinity)){candles.update(c)}else{candles.setData(rows)}if(redrawTimer)return;redrawTimer=requestAnimationFrame(()=>{redrawTimer=0;if(!rows.length)return;if(merged.isLatest&&Number(c.time)>=Number(previousLast??-Infinity)){updateIndicator(INDICATOR_REGISTRY,indicator.value,rows,series)}else{redraw()}})}catch(_){}};
  marketSocket.onclose=()=>{if(generation!==streamGeneration)return;marketSocket=null;if(document.visibilityState==="hidden")return;status.textContent="انقطع البث — إعادة المحاولة…";reconnectTimer=setTimeout(()=>{reconnectTimer=0;if(generation===streamGeneration)connectStream()},reconnectDelay);reconnectDelay=Math.min(reconnectDelay*2,30000)};
 }
 document.getElementById("load").onclick=async()=>{await load(null,true);connectStream()};
