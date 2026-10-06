@@ -5,7 +5,20 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, Sequence
 
-from .indicators import ema
+
+def _ema(values: Sequence[float], period: int) -> list[float | None]:
+    if period < 1:
+        raise ValueError("period must be positive")
+    result: list[float | None] = [None] * len(values)
+    if len(values) < period:
+        return result
+    previous = sum(values[:period]) / period
+    result[period - 1] = previous
+    alpha = 2 / (period + 1)
+    for index in range(period, len(values)):
+        previous = (values[index] - previous) * alpha + previous
+        result[index] = previous
+    return result
 
 
 class Signal(str, Enum):
@@ -81,8 +94,8 @@ class SmaCrossStrategy:
         if index < 1:
             return Signal.HOLD
         closes = [c.close for c in candles[: index + 1]]
-        fast = ema(closes, self.fast)
-        slow = ema(closes, self.slow)
+        fast = _ema(closes, self.fast)
+        slow = _ema(closes, self.slow)
         if fast[index] is None or slow[index] is None:
             return Signal.HOLD
         if fast[index] > slow[index] and (fast[index - 1] is None or slow[index - 1] is None or fast[index - 1] <= slow[index - 1]):
