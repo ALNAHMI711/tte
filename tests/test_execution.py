@@ -144,3 +144,29 @@ def test_execution_preserves_client_order_id_for_idempotent_paper_submission():
     assert second is first
     assert len(engine.paper.orders) == 1
     assert engine.paper.position("BTC/USDT").quantity == 0.01
+
+
+def test_execution_uses_authoritative_portfolio_exposure_for_new_position():
+    engine = ExecutionEngine(limits=__import__("trading.risk", fromlist=["RiskLimits"]).RiskLimits(max_open_exposure=100))
+    engine.paper.submit("BTCUSDT", "buy", 0.08, 1000)
+
+    with pytest.raises(RiskRejected, match="open exposure"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "buy", 0.03, 1000),
+            RiskContext(),
+            market_prices={"BTCUSDT": 1000},
+        )
+
+
+def test_execution_allows_sell_when_it_reduces_portfolio_exposure():
+    engine = ExecutionEngine(limits=__import__("trading.risk", fromlist=["RiskLimits"]).RiskLimits(max_open_exposure=100))
+    engine.paper.submit("BTCUSDT", "buy", 0.10, 1000)
+
+    order = engine.submit(
+        OrderRequest("BTCUSDT", "sell", 0.05, 1000),
+        RiskContext(),
+        market_prices={"BTCUSDT": 1000},
+    )
+
+    assert order.status == "FILLED"
+    assert engine.paper.position("BTCUSDT").quantity == 0.05
