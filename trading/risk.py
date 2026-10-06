@@ -88,6 +88,19 @@ def validate_order(
     if ctx.correlation_exposure + notional / limits.max_open_exposure > limits.max_correlation_exposure:
         raise RiskRejected("correlation exposure limit reached")
 
+    if side is not None and entry_price is not None and stop_loss_price is not None:
+        normalized_side = side.strip().lower()
+        if normalized_side not in {"buy", "sell"}:
+            raise RiskRejected("side must be buy or sell")
+        if not math.isfinite(entry_price) or entry_price <= 0:
+            raise RiskRejected("entry price must be positive")
+        if not math.isfinite(stop_loss_price) or stop_loss_price <= 0:
+            raise RiskRejected("stop loss price must be positive")
+        if normalized_side == "buy" and stop_loss_price >= entry_price:
+            raise RiskRejected("long stop loss must be below entry price")
+        if normalized_side == "sell" and stop_loss_price <= entry_price:
+            raise RiskRejected("short stop loss must be above entry price")
+
     if account_equity is None:
         return
     if not math.isfinite(account_equity) or account_equity <= 0:
@@ -96,15 +109,6 @@ def validate_order(
         raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
     if not all(math.isfinite(value) for value in (entry_price, stop_loss_price, quantity)) or entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
         raise RiskRejected("entry, stop loss and quantity must be positive")
-
-    if side is not None:
-        normalized_side = side.strip().lower()
-        if normalized_side not in {"buy", "sell"}:
-            raise RiskRejected("side must be buy or sell")
-        if normalized_side == "buy" and stop_loss_price >= entry_price:
-            raise RiskRejected("long stop loss must be below entry price")
-        if normalized_side == "sell" and stop_loss_price <= entry_price:
-            raise RiskRejected("short stop loss must be above entry price")
 
     risk_amount = abs(entry_price - stop_loss_price) * quantity
     risk_budget = account_equity * (limits.risk_per_trade_pct / 100)
