@@ -81,6 +81,7 @@ class ExecutionEngine:
             entry_price=final_price,
             stop_loss_price=stop_loss_price,
             quantity=final_quantity,
+            side=request.side,
         )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
