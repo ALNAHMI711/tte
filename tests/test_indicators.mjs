@@ -63,3 +63,14 @@ test("mergeCandles deduplicates, replaces, sorts, and caps", async () => {
     {time:2,close:25},{time:3,close:30},{time:4,close:40},{time:5,close:50}
   ]);
 });
+
+
+test("mergeCandle sorts late candles and identifies the latest point", async () => {
+  const { mergeCandle } = await import("../frontend/indicator-data.js");
+  const a = mergeCandle([{time:1},{time:3}], {time:2}, 300);
+  assert.deepEqual(a.rows.map(x=>x.time), [1,2,3]);
+  assert.equal(a.isLatest, false);
+  const b = mergeCandle(a.rows, {time:4}, 300);
+  assert.deepEqual(b.rows.map(x=>x.time), [1,2,3,4]);
+  assert.equal(b.isLatest, true);
+});
