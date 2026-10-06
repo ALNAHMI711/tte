@@ -84,11 +84,11 @@ def validate_order(
         raise RiskRejected("emergency stop is active")
     if not math.isfinite(notional) or notional <= 0:
         raise RiskRejected("order notional must be positive")
-    if not math.isfinite(signal_score) if signal_score is not None else False:
+    if signal_score is not None and not math.isfinite(signal_score):
         raise RiskRejected("signal score must be finite")
     if signal_score is None or signal_score < limits.min_signal_score:
         raise RiskRejected("signal score is below minimum")
-    if not math.isfinite(reward_risk_ratio) if reward_risk_ratio is not None else False:
+    if reward_risk_ratio is not None and not math.isfinite(reward_risk_ratio):
         raise RiskRejected("reward-risk ratio must be finite")
     if reward_risk_ratio is None or reward_risk_ratio < limits.min_reward_risk:
         raise RiskRejected("reward-risk ratio is below minimum")
@@ -98,7 +98,7 @@ def validate_order(
         raise RiskRejected("daily loss limit reached")
     if ctx.weekly_loss >= limits.max_weekly_loss:
         raise RiskRejected("weekly loss limit reached")
-    if ctx.open_positions >= limits.max_open_positions:
+    if (exposure_delta is None or exposure_delta > 0) and ctx.open_positions >= limits.max_open_positions:
         raise RiskRejected("maximum open positions reached")
     projected_exposure = ctx.open_exposure + (notional if exposure_delta is None else exposure_delta)
     if projected_exposure < 0:
