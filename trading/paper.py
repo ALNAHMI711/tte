@@ -64,6 +64,10 @@ class PaperBroker:
                     status TEXT NOT NULL
                 )"""
             )
+            self._connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_paper_orders_symbol "
+                "ON paper_orders(symbol)"
+            )
             self._connection.commit()
             self._restore()
 
