@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .adapters import TradingEnvironment, enforce_safe_account
+
 from .binance_preflight import BinancePreflightReport
 from .config import settings
 from .kill_switch import KillSwitch
@@ -31,6 +33,54 @@ class ExecutionEngine:
         self.kill_switch = kill_switch or KillSwitch()
         self.live_preflight = live_preflight
 
+    def submit_from_adapter(
+        self,
+        request: OrderRequest,
+        context: RiskContext,
+        adapter: object,
+        *,
+        account_equity: float | None = None,
+        stop_loss_price: float | None = None,
+        market_prices: dict[str, float] | None = None,
+    ) -> PaperOrder:
+        """Route adapter market data through filters/risk into Paper only.
+
+        This method deliberately never calls adapter.submit_order. A
+        TESTNET adapter is a read-only source of symbol constraints and
+        market marks; the paper ledger remains the only execution sink.
+        LIVE adapters are rejected before any order/risk routing occurs.
+        """
+        environment = getattr(adapter, "environment", None)
+        if environment is TradingEnvironment.LIVE:
+            raise RuntimeError("LIVE adapter routing is disabled in this foundation")
+        if environment is not TradingEnvironment.TESTNET:
+            raise RuntimeError("unsupported adapter environment")
+
+        account = adapter.account_snapshot()
+        enforce_safe_account(account)
+        if account.environment is not TradingEnvironment.TESTNET:
+            raise RuntimeError("adapter account environment must be TESTNET")
+        capabilities = getattr(adapter, "capabilities", None)
+        if capabilities is None or not capabilities.market_data:
+            raise RuntimeError("adapter must provide market data")
+
+        symbol_info = adapter.symbol_info(request.symbol)
+        prices = dict(market_prices or {})
+        if not prices:
+            for position in self.paper.positions():
+                bid, ask = adapter.ticker(position.symbol)
+                if bid <= 0 or ask <= 0:
+                    raise RuntimeError("adapter returned invalid market prices")
+                prices[position.symbol.strip().upper()] = (bid + ask) / 2.0
+
+        return self.submit(
+            request,
+            context,
+            symbol_info,
+            account_equity=account_equity,
+            stop_loss_price=stop_loss_price,
+            market_prices=prices or None,
+        )
     def submit(
         self,
         request: OrderRequest,
