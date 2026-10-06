@@ -138,7 +138,6 @@ def test_kill_switch_audit_persists_and_chain_verifies(tmp_path):
             base_url="https://testserver",
         )
         assert client.post("/login", json={"user_id": "admin", "password": PASSWORD}).status_code == 200
-        csrf = client.get("/csrf").json()["csrf_token"]
         assert client.post(
             "/control/step-up",
             json={"user_id": "admin", "password": PASSWORD},
@@ -199,12 +198,12 @@ def test_market_stream_rejects_malformed_symbol_after_authentication():
             pass
     assert getattr(exc.value, "code", None) == 1008
 
-def test_authentication_events_are_persisted_without_credentials():
+def test_authentication_events_are_persisted_without_credentials(tmp_path):
     auth = AuthenticationService(
         {"admin": credential_from_password("admin", PASSWORD)},
         SessionStore(ttl_seconds=100, step_up_seconds=10),
     )
-    with SQLiteAuditStore(__import__("pathlib").Path("/tmp/tte-api-auth-audit.sqlite3")) as store:
+    with SQLiteAuditStore(tmp_path / "audit.sqlite3") as store:
         client = TestClient(create_app(auth, audit_store=store), base_url="https://testserver")
         failed = client.post("/login", json={"user_id": "admin", "password": "wrong password"}, headers={"x-request-id": "login-fail-1"})
         assert failed.status_code == 401
