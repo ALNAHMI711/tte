@@ -144,7 +144,7 @@ def test_paper_sqlite_submit_is_atomic_on_insert_failure(tmp_path):
     assert restored.position("BTCUSDT").quantity == 1
 
 
-def test_paper_sqlite_second_broker_sees_committed_orders(tmp_path):
+def test_paper_sqlite_second_broker_refreshes_committed_orders(tmp_path):
     path = tmp_path / "paper.sqlite"
     first = PaperBroker(str(path))
     second = PaperBroker(str(path))
@@ -157,5 +157,31 @@ def test_paper_sqlite_second_broker_sees_committed_orders(tmp_path):
     assert first.position("BTCUSDT").quantity == 1
 
     first.submit("BTCUSDT", "buy", 3, 300, client_order_id="shared-3")
+    second.refresh()
     assert second.position("BTCUSDT").quantity == 6
     assert second.order_by_client_id("shared-3") is not None
+
+
+def test_paper_reconciliation_matches_filled_order_ledger():
+    broker = PaperBroker()
+    broker.submit("BTCUSDT", "buy", 2, 100)
+    broker.submit("BTCUSDT", "buy", 1, 200)
+    broker.submit("BTCUSDT", "sell", 0.5, 150)
+
+    result = broker.reconcile()
+    assert result.valid
+    assert result.order_count == 3
+    assert result.position_count == 1
+    assert result.errors == ()
+
+
+def test_paper_reconciliation_detects_position_drift():
+    broker = PaperBroker()
+    broker.submit("BTCUSDT", "buy", 1, 100)
+    broker._positions["BTCUSDT"] = broker._positions["BTCUSDT"].__class__(
+        "BTCUSDT", 2, 100
+    )
+
+    result = broker.reconcile(refresh=False)
+    assert not result.valid
+    assert "positions do not match the filled-order ledger" in result.errors
