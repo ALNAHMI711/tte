@@ -14,6 +14,21 @@ class RiskLimits:
     risk_per_trade_pct: float = 0.5
     max_correlation_exposure: float = 1.0
 
+    def __post_init__(self) -> None:
+        fields = (
+            ("max_order_notional", self.max_order_notional),
+            ("max_daily_loss", self.max_daily_loss),
+            ("max_weekly_loss", self.max_weekly_loss),
+            ("max_open_exposure", self.max_open_exposure),
+            ("max_slippage_bps", self.max_slippage_bps),
+            ("max_correlation_exposure", self.max_correlation_exposure),
+        )
+        for name, value in fields:
+            if value <= 0:
+                raise ValueError(f"{name} must be positive")
+        if not 0 < self.risk_per_trade_pct <= 100:
+            raise ValueError("risk_per_trade_pct must be greater than 0 and at most 100")
+
 
 @dataclass(frozen=True)
 class RiskContext:
@@ -38,6 +53,7 @@ def validate_order(
     entry_price: float | None = None,
     stop_loss_price: float | None = None,
     quantity: float | None = None,
+    side: str | None = None,
 ) -> None:
     if ctx.emergency_stop:
         raise RiskRejected("emergency stop is active")
@@ -56,14 +72,25 @@ def validate_order(
     if ctx.correlation_exposure + notional / limits.max_open_exposure > limits.max_correlation_exposure:
         raise RiskRejected("correlation exposure limit reached")
 
-    if account_equity is not None:
-        if account_equity <= 0:
-            raise RiskRejected("account equity must be positive")
-        if entry_price is None or stop_loss_price is None or quantity is None:
-            raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
-        if entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
-            raise RiskRejected("entry, stop loss and quantity must be positive")
-        risk_amount = abs(entry_price - stop_loss_price) * quantity
-        risk_budget = account_equity * (limits.risk_per_trade_pct / 100)
-        if risk_amount > risk_budget:
-            raise RiskRejected("order exceeds risk-per-trade budget")
+    if account_equity is None:
+        return
+    if account_equity <= 0:
+        raise RiskRejected("account equity must be positive")
+    if entry_price is None or stop_loss_price is None or quantity is None:
+        raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
+    if entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
+        raise RiskRejected("entry, stop loss and quantity must be positive")
+
+    if side is not None:
+        normalized_side = side.strip().lower()
+        if normalized_side not in {"buy", "sell"}:
+            raise RiskRejected("side must be buy or sell")
+        if normalized_side == "buy" and stop_loss_price >= entry_price:
+            raise RiskRejected("long stop loss must be below entry price")
+        if normalized_side == "sell" and stop_loss_price <= entry_price:
+            raise RiskRejected("short stop loss must be above entry price")
+
+    risk_amount = abs(entry_price - stop_loss_price) * quantity
+    risk_budget = account_equity * (limits.risk_per_trade_pct / 100)
+    if risk_amount > risk_budget:
+        raise RiskRejected("order exceeds risk-per-trade budget")
