@@ -142,6 +142,8 @@ def create_app(
     async def login(request: Request) -> JSONResponse:
         user_id, password = await _credentials(request)
         result = auth.authenticate(user_id, password, request_id=request.headers.get("x-request-id", ""))
+        if result.audit_event is not None:
+            log.record(result.audit_event)
         if not result.authenticated or result.session is None:
             status = 429 if result.audit_event and result.audit_event.outcome == "blocked" else 401
             return _json_error(status, "authentication_failed")
@@ -161,7 +163,16 @@ def create_app(
         if not _csrf_valid(request):
             return _json_error(403, "csrf_failed")
         token = request.cookies.get(SESSION_COOKIE.name, "")
-        auth.logout(token)
+        session = auth.sessions.get(token)
+        revoked = auth.logout(token)
+        if session is not None:
+            log.record(AuditEvent.create(
+                "logout",
+                session.user_id,
+                "success" if revoked else "failed",
+                request_id=request.headers.get("x-request-id", ""),
+                details={"revoked": revoked},
+            ))
         response = JSONResponse({"authenticated": False})
         response.delete_cookie(SESSION_COOKIE.name, path=SESSION_COOKIE.path)
         return response
@@ -173,6 +184,8 @@ def create_app(
         token = request.cookies.get(SESSION_COOKIE.name, "")
         _, password = await _credentials(request)
         result = auth.step_up(token, password, request_id=request.headers.get("x-request-id", ""))
+        if result.audit_event is not None:
+            log.record(result.audit_event)
         if not result.authenticated or result.session is None:
             return _json_error(401, "step_up_failed")
         response = JSONResponse({"elevated": True})
