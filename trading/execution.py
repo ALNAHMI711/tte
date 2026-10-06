@@ -35,6 +35,9 @@ class ExecutionEngine:
         request: OrderRequest,
         context: RiskContext,
         symbol_info: object | None = None,
+        *,
+        account_equity: float | None = None,
+        stop_loss_price: float | None = None,
     ) -> PaperOrder:
         """Validate hard safety gates before any order is created.
 
@@ -69,7 +72,7 @@ class ExecutionEngine:
             final_price = float(normalized.price)
 
         notional = final_quantity * final_price
-        validate_order(notional, self.limits, context)
+        validate_order(\n            notional,\n            self.limits,\n            context,\n            account_equity=account_equity,\n            entry_price=final_price,\n            stop_loss_price=stop_loss_price,\n            quantity=final_quantity,\n        )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
         if not settings.paper_trading:
