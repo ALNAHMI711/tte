@@ -21,6 +21,8 @@ class Candle:
     volume: float
 
     def validate(self) -> None:
+        if not self.symbol or not self.timeframe:
+            raise ValueError("candle symbol and timeframe are required")
         if min(self.open, self.high, self.low, self.close, self.volume) < 0:
             raise ValueError("market values cannot be negative")
         if self.high < max(self.open, self.close) or self.low > min(self.open, self.close):
@@ -34,6 +36,8 @@ class OrderBookSnapshot:
     asks: tuple[tuple[float, float], ...]
 
     def validate(self) -> None:
+        if not self.symbol:
+            raise ValueError("order-book symbol is required")
         for price, size in (*self.bids, *self.asks):
             if price <= 0 or size < 0:
                 raise ValueError("invalid order-book level")
@@ -123,7 +127,7 @@ class BinanceMarketData:
             except (TypeError, ValueError):
                 raise ValueError(f"Binance returned invalid {key} filter")
 
-        return SymbolInfo(
+        info = SymbolInfo(
             symbol=str(item.get("symbol", normalized)).upper(),
             status=str(item.get("status", "")),
             base_asset=str(item.get("baseAsset", "")).upper(),
@@ -133,6 +137,15 @@ class BinanceMarketData:
             min_notional=number(notional, "minNotional"),
             price_tick_size=number(price, "tickSize"),
         )
+        if info.status != "TRADING":
+            raise ValueError(f"symbol {info.symbol} is not trading")
+        if info.min_quantity <= 0 or info.quantity_step <= 0:
+            raise ValueError("Binance returned unusable quantity filters")
+        if info.price_tick_size <= 0:
+            raise ValueError("Binance returned unusable price filter")
+        if info.min_notional < 0:
+            raise ValueError("Binance returned invalid minimum notional")
+        return info
 
     def klines(
         self,
