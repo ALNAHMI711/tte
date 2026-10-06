@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import ContextManager, Protocol
+from typing import ContextManager, Iterator, Protocol
 import sqlite3
 
 from trading.paper_types import PaperOrderRecord
