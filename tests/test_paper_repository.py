@@ -90,3 +90,22 @@ def test_postgres_repository_fails_clearly_without_driver(monkeypatch):
     monkeypatch.setattr("builtins.__import__", blocked_import)
     with pytest.raises(RuntimeError, match="requires the postgres dependency"):
         PostgresPaperLedgerRepository.open("postgresql://invalid")
+
+
+@pytest.mark.integration
+def test_postgres_repository_round_trips_orders(monkeypatch):
+    dsn = __import__("os").getenv("POSTGRES_TEST_DSN")
+    if not dsn:
+        pytest.skip("POSTGRES_TEST_DSN is not configured")
+    psycopg = pytest.importorskip("psycopg")
+    from trading.paper_repository import PostgresPaperLedgerRepository
+
+    repo = PostgresPaperLedgerRepository.open(dsn)
+    try:
+        with repo.transaction():
+            with repo.connection.cursor() as cursor:
+                cursor.execute("DELETE FROM paper_orders")
+            repo.insert_order(_order("postgres-order", "postgres-client"))
+        assert repo.load_orders() == (_order("postgres-order", "postgres-client"),)
+    finally:
+        repo.close()
