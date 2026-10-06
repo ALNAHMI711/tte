@@ -121,22 +121,22 @@ def test_paper_sqlite_submit_is_atomic_on_insert_failure(tmp_path):
     path = tmp_path / "paper.sqlite"
     broker = PaperBroker(str(path))
     broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="atomic-1")
+    broker._connection.execute(
+        "CREATE TRIGGER reject_paper_insert "
+        "BEFORE INSERT ON paper_orders "
+        "BEGIN SELECT RAISE(ABORT, 'injected insert failure'); END"
+    )
+    broker._connection.commit()
 
-    original_execute = broker._connection.execute
-
-    def fail_insert(sql, *args):
-        if sql.startswith("INSERT INTO paper_orders"):
-            raise sqlite3.OperationalError("injected insert failure")
-        return original_execute(sql, *args)
-
-    broker._connection.execute = fail_insert
-
-    with pytest.raises(sqlite3.OperationalError, match="injected insert failure"):
+    with pytest.raises(sqlite3.IntegrityError, match="injected insert failure"):
         broker.submit("BTCUSDT", "buy", 2, 200, client_order_id="atomic-2")
 
     assert len(broker.orders) == 1
     assert broker.order_by_client_id("atomic-2") is None
     assert broker.position("BTCUSDT").quantity == 1
+
+    broker._connection.execute("DROP TRIGGER reject_paper_insert")
+    broker._connection.commit()
 
     restored = PaperBroker(str(path))
     assert len(restored.orders) == 1
