@@ -29,7 +29,7 @@ class PaperOrder:
 
 
 class PaperBroker:
-    """In-memory paper ledger with deterministic fills and idempotent client IDs."""
+    """Persistent or in-memory paper ledger with deterministic fills."""
 
     def __init__(self, persistence_path: str | None = None) -> None:
         self.orders: list[PaperOrder] = []
@@ -67,8 +67,14 @@ class PaperBroker:
             raise ValueError("symbol is required")
         if side not in VALID_SIDES:
             raise ValueError("side must be buy or sell")
-        if quantity <= 0 or price <= 0:
-            raise ValueError("quantity and price must be positive")
+        if (
+            not math.isfinite(quantity)
+            or not math.isfinite(price)
+            or quantity <= 0
+            or price <= 0
+        ):
+            raise ValueError("quantity and price must be positive finite values")
+
         if client_order_id:
             client_order_id = client_order_id.strip()
             if not client_order_id:
@@ -100,13 +106,15 @@ class PaperBroker:
         if self._connection is not None:
             self._connection.execute(
                 "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (order.id, order.symbol, order.side, order.quantity, order.price, order.client_order_id, order.status),
-            )
-            self._connection.commit()
-        if self._connection is not None:
-            self._connection.execute(
-                "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (order.id, order.symbol, order.side, order.quantity, order.price, order.client_order_id, order.status),
+                (
+                    order.id,
+                    order.symbol,
+                    order.side,
+                    order.quantity,
+                    order.price,
+                    order.client_order_id,
+                    order.status,
+                ),
             )
             self._connection.commit()
         self.orders.append(order)
@@ -114,31 +122,6 @@ class PaperBroker:
             self._by_client_id[client_order_id] = order
         self._apply_fill(order)
         return order
-
-    def _restore(self) -> None:
-        assert self._connection is not None
-        rows = self._connection.execute(
-            "SELECT id, symbol, side, quantity, price, client_order_id, status FROM paper_orders ORDER BY rowid"
-        ).fetchall()
-        for row in rows:
-            order = PaperOrder(row[1], row[2], float(row[3]), float(row[4]), row[5], row[0], row[6])
-            if (
-                not order.symbol or order.side not in VALID_SIDES
-                or not math.isfinite(order.quantity) or order.quantity <= 0
-                or not math.isfinite(order.price) or order.price <= 0
-            ):
-                raise ValueError("paper ledger contains invalid order data")
-            if order.client_order_id:
-                if order.client_order_id in self._by_client_id:
-                    raise ValueError("paper ledger contains duplicate client order ids")
-                self._by_client_id[order.client_order_id] = order
-            if order.side == "sell":
-                current = self._positions.get(order.symbol)
-                if current is None or order.quantity > current.quantity:
-                    raise ValueError("paper ledger contains an invalid sell")
-            self.orders.append(order)
-            self._apply_fill(order)
-
 
     def _restore(self) -> None:
         assert self._connection is not None
@@ -156,10 +139,12 @@ class PaperBroker:
                 status=row[6],
             )
             if (
-                not math.isfinite(order.quantity) or order.quantity <= 0
-                or not math.isfinite(order.price) or order.price <= 0
+                not order.symbol
                 or order.side not in VALID_SIDES
-                or not order.symbol
+                or not math.isfinite(order.quantity)
+                or order.quantity <= 0
+                or not math.isfinite(order.price)
+                or order.price <= 0
             ):
                 raise ValueError("paper ledger contains invalid order data")
             if order.client_order_id:
@@ -173,7 +158,6 @@ class PaperBroker:
             self.orders.append(order)
             self._apply_fill(order)
 
-
     def _apply_fill(self, order: PaperOrder) -> None:
         current = self._positions.get(order.symbol)
         if order.side == "buy":
@@ -181,7 +165,9 @@ class PaperBroker:
                 self._positions[order.symbol] = PaperPosition(order.symbol, order.quantity, order.price)
                 return
             total_qty = current.quantity + order.quantity
-            average = ((current.quantity * current.average_price) + (order.quantity * order.price)) / total_qty
+            average = (
+                (current.quantity * current.average_price) + (order.quantity * order.price)
+            ) / total_qty
             self._positions[order.symbol] = PaperPosition(order.symbol, total_qty, average)
             return
 
@@ -189,7 +175,9 @@ class PaperBroker:
         if remaining <= 0:
             self._positions.pop(order.symbol, None)
         else:
-            self._positions[order.symbol] = PaperPosition(order.symbol, remaining, current.average_price)
+            self._positions[order.symbol] = PaperPosition(
+                order.symbol, remaining, current.average_price
+            )
 
     def order_by_client_id(self, client_order_id: str) -> PaperOrder | None:
         normalized = client_order_id.strip()
