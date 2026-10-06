@@ -9,19 +9,22 @@ export class DrawingManager {
     host.addEventListener("pointerup",e=>this.up(e));host.addEventListener("pointercancel",e=>this.up(e));
     window.addEventListener("resize",()=>this.render());this.render();
   }
-  setMode(mode){this.mode=MODES.has(mode)?mode:"select"}
+  setMode(mode){this.mode=MODES.has(mode)?mode:"select";if(this.mode==="select"&&this.drag)this.cancel()}
+  cancel(){this.drag=null;this.render()}
   point(e){const r=this.host.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
   model(p){return{logical:this.chart.timeScale().coordinateToLogical(p.x),price:this.chart.priceScale("right").coordinateToPrice(p.y)}}
   down(e){if(!MODES.has(this.mode)||this.drag)return;const m=this.model(this.point(e));if(m.logical==null||m.price==null)return;this.drag={type:this.mode,p1:m,p2:m};this.host.setPointerCapture?.(e.pointerId);this.render()}
   move(e){if(!this.drag)return;const m=this.model(this.point(e));if(m.logical!=null&&m.price!=null){this.drag.p2=m;this.render()}}
-  up(e){if(!this.drag)return;this.items.push({...this.drag});this.drag=null;this.mode="select";this.host.releasePointerCapture?.(e.pointerId);this.render()}
+  up(e){if(!this.drag)return;const d=this.drag;this.drag=null;this.mode="select";this.host.releasePointerCapture?.(e.pointerId);if(this.validDrawing(d))this.items.push({type:d.type,p1:{...d.p1},p2:{...d.p2}});this.render()}
   clear(){this.items=[];this.render()}
   serialize(){return this.items.map(({type,p1,p2})=>({type,p1,p2}))}
   restore(items){
- this.items=Array.isArray(items)?items.filter(d=>MODES.has(d?.type)&&this.validPoint(d?.p1)&&this.validPoint(d?.p2)).map(d=>({type:d.type,p1:{logical:Number(d.p1.logical),price:Number(d.p1.price)},p2:{logical:Number(d.p2.logical),price:Number(d.p2.price)}})):[];
- this.render()
-}
+    this.items=Array.isArray(items)?items.filter(d=>this.validDrawing(d)).map(d=>({type:d.type,p1:{logical:Number(d.p1.logical),price:Number(d.p1.price)},p2:{logical:Number(d.p2.logical),price:Number(d.p2.price)}})):[];
+    this.drag=null;
+    this.render()
+  }
 validPoint(p){return p&&Number.isFinite(Number(p.logical))&&Number.isFinite(Number(p.price))}
+  validDrawing(d){return MODES.has(d?.type)&&this.validPoint(d?.p1)&&this.validPoint(d?.p2)}
   coords(p){return{x:this.chart.timeScale().logicalToCoordinate(p.logical),y:this.chart.priceScale("right").priceToCoordinate(p.price)}}
   render(){
     this.svg.replaceChildren();const all=this.drag?[...this.items,this.drag]:this.items;
