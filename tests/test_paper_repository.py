@@ -109,3 +109,19 @@ def test_postgres_repository_round_trips_orders(monkeypatch):
         assert repo.load_orders() == (_order("postgres-order", "postgres-client"),)
     finally:
         repo.close()
+
+
+def test_sqlite_repository_healthcheck(tmp_path):
+    repository = SQLitePaperLedgerRepository.open(str(tmp_path / "paper.sqlite"))
+    repository.healthcheck()
+    repository.close()
+
+
+def test_paper_broker_healthcheck_fails_after_close(tmp_path):
+    from trading.paper import PaperBroker
+
+    repository = SQLitePaperLedgerRepository.open(str(tmp_path / "paper.sqlite"))
+    broker = PaperBroker(repository=repository)
+    broker.healthcheck()
+    broker.close()
+    broker.healthcheck()
