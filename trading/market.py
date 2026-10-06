@@ -45,11 +45,15 @@ class SymbolInfo:
     status: str
     base_asset: str
     quote_asset: str
+    min_quantity: float = 0.0
+    quantity_step: float = 0.0
+    min_notional: float = 0.0
+    price_tick_size: float = 0.0
 
 
 class BinanceMarketData:
     """Read-only Binance Spot Testnet market-data client.
-    
+
     This adapter never signs requests and never sends trading endpoints.
     The opener is injectable so parsing can be tested without network access.
     """
@@ -100,11 +104,34 @@ class BinanceMarketData:
         item = symbols[0]
         if not isinstance(item, dict):
             raise ValueError("Binance returned invalid symbol information")
+
+        filters = item.get("filters", [])
+        if not isinstance(filters, list):
+            raise ValueError("Binance returned invalid symbol filters")
+        parsed: dict[str, dict[str, object]] = {}
+        for raw in filters:
+            if isinstance(raw, dict) and isinstance(raw.get("filterType"), str):
+                parsed[raw["filterType"]] = raw
+
+        lot = parsed.get("LOT_SIZE", {})
+        price = parsed.get("PRICE_FILTER", {})
+        notional = parsed.get("NOTIONAL") or parsed.get("MIN_NOTIONAL") or {}
+
+        def number(mapping: dict[str, object], key: str, default: float = 0.0) -> float:
+            try:
+                return float(mapping.get(key, default))
+            except (TypeError, ValueError):
+                raise ValueError(f"Binance returned invalid {key} filter")
+
         return SymbolInfo(
             symbol=str(item.get("symbol", normalized)).upper(),
             status=str(item.get("status", "")),
             base_asset=str(item.get("baseAsset", "")).upper(),
             quote_asset=str(item.get("quoteAsset", "")).upper(),
+            min_quantity=number(lot, "minQty"),
+            quantity_step=number(lot, "stepSize"),
+            min_notional=number(notional, "minNotional"),
+            price_tick_size=number(price, "tickSize"),
         )
 
     def klines(
@@ -120,14 +147,12 @@ class BinanceMarketData:
             raise ValueError("timeframe is required")
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
-
         payload = self._get(
             "/api/v3/klines",
             {"symbol": normalized, "interval": timeframe, "limit": limit},
         )
         if not isinstance(payload, list):
             raise ValueError("Binance returned an invalid klines payload")
-
         candles: list[Candle] = []
         for row in payload:
             if not isinstance(row, list) or len(row) < 6:
@@ -153,10 +178,7 @@ class BinanceMarketData:
         normalized = self._symbol(symbol)
         if not 1 <= limit <= 5000:
             raise ValueError("limit must be between 1 and 5000")
-        payload = self._get(
-            "/api/v3/depth",
-            {"symbol": normalized, "limit": limit},
-        )
+        payload = self._get("/api/v3/depth", {"symbol": normalized, "limit": limit})
         if not isinstance(payload, dict):
             raise ValueError("Binance returned an invalid order-book payload")
 
