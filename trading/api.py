@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import re
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -22,6 +23,7 @@ from .server_ip import PublicIPClient, PublicIPError
 
 SESSION_COOKIE = CookiePolicy()
 CSRF_COOKIE = "tte_csrf"
+MARKET_SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,30}$")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
@@ -216,7 +218,7 @@ def create_app(
         if _authenticated_session(request, auth) is None:
             return _json_error(401, "authentication_required")
         symbol, timeframe = symbol.strip().upper(), timeframe.strip()
-        if not symbol or len(symbol) > 30 or not timeframe or len(timeframe) > 10 or not 1 <= limit <= 1000:
+        if not MARKET_SYMBOL_RE.fullmatch(symbol) or not timeframe or len(timeframe) > 10 or not 1 <= limit <= 1000:
             return _json_error(400, "invalid_market_request")
         try:
             candles = app.state.market_client.candles(symbol, timeframe, limit)
@@ -235,7 +237,7 @@ def create_app(
         symbol = websocket.query_params.get("symbol", "BTCUSDT").strip().upper()
         timeframe = websocket.query_params.get("timeframe", "1m").strip()
         allowed = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d"}
-        if not symbol or len(symbol) > 30 or timeframe not in allowed:
+        if not MARKET_SYMBOL_RE.fullmatch(symbol) or timeframe not in allowed:
             await websocket.close(code=1008, reason="invalid_market_request")
             return
         await websocket.accept()
