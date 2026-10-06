@@ -7,6 +7,9 @@ import sqlite3
 from threading import RLock
 from uuid import uuid4
 
+from trading.paper_repository import PaperLedgerRepository, SQLitePaperLedgerRepository
+from trading.paper_types import PaperOrderRecord
+
 
 VALID_SIDES = {"buy", "sell"}
 
@@ -47,29 +50,19 @@ class PaperBroker:
         self._by_client_id: dict[str, PaperOrder] = {}
         self._positions: dict[str, PaperPosition] = {}
         self._persistence_path = persistence_path
-        self._connection: sqlite3.Connection | None = None
+        self._repository: PaperLedgerRepository | None = None
         self._lock = RLock()
         if persistence_path:
-            self._connection = sqlite3.connect(
-                persistence_path, timeout=5.0, check_same_thread=False
-            )
-            self._connection.execute(
-                """CREATE TABLE IF NOT EXISTS paper_orders (
-                    id TEXT PRIMARY KEY,
-                    symbol TEXT NOT NULL,
-                    side TEXT NOT NULL,
-                    quantity REAL NOT NULL,
-                    price REAL NOT NULL,
-                    client_order_id TEXT UNIQUE,
-                    status TEXT NOT NULL
-                )"""
-            )
-            self._connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_paper_orders_symbol "
-                "ON paper_orders(symbol)"
-            )
-            self._connection.commit()
+            self._repository = SQLitePaperLedgerRepository.open(persistence_path)
             self._restore()
+
+    @property
+    def _connection(self) -> sqlite3.Connection | None:
+        """Compatibility hook for tests and controlled SQLite inspection."""
+        repository = self._repository
+        if isinstance(repository, SQLitePaperLedgerRepository):
+            return repository.connection
+        return None
 
     def submit(
         self,
@@ -97,60 +90,54 @@ class PaperBroker:
             client_order_id = client_order_id.strip() or None
 
         with self._lock:
-            if self._connection is None:
+            if self._repository is None:
                 return self._submit_memory(
                     symbol, side, quantity, price, client_order_id
                 )
 
             try:
-                self._connection.execute("BEGIN IMMEDIATE")
-                self._reload_from_database()
+                with self._repository.transaction():
+                    self._reload_from_database()
 
-                if client_order_id:
-                    existing = self._by_client_id.get(client_order_id)
-                    if existing is not None:
-                        if (
-                            existing.symbol != symbol
-                            or existing.side != side
-                            or existing.quantity != quantity
-                            or existing.price != price
-                        ):
-                            raise ValueError(
-                                "client_order_id is already bound to a different order"
-                            )
-                        self._connection.rollback()
-                        return existing
+                    if client_order_id:
+                        existing = self._by_client_id.get(client_order_id)
+                        if existing is not None:
+                            if (
+                                existing.symbol != symbol
+                                or existing.side != side
+                                or existing.quantity != quantity
+                                or existing.price != price
+                            ):
+                                raise ValueError(
+                                    "client_order_id is already bound to a different order"
+                                )
+                            return existing
 
-                self._validate_fill(symbol, side, quantity)
-                order = PaperOrder(
-                    symbol=symbol,
-                    side=side,
-                    quantity=quantity,
-                    price=price,
-                    client_order_id=client_order_id,
-                )
-                self._connection.execute(
-                    "INSERT INTO paper_orders "
-                    "(id, symbol, side, quantity, price, client_order_id, status) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        order.id,
-                        order.symbol,
-                        order.side,
-                        order.quantity,
-                        order.price,
-                        order.client_order_id,
-                        order.status,
-                    ),
-                )
-                self.orders.append(order)
-                if client_order_id:
-                    self._by_client_id[client_order_id] = order
-                self._apply_fill(order)
-                self._connection.commit()
-                return order
+                    self._validate_fill(symbol, side, quantity)
+                    order = PaperOrder(
+                        symbol=symbol,
+                        side=side,
+                        quantity=quantity,
+                        price=price,
+                        client_order_id=client_order_id,
+                    )
+                    self._repository.insert_order(
+                        PaperOrderRecord(
+                            id=order.id,
+                            symbol=order.symbol,
+                            side=order.side,
+                            quantity=order.quantity,
+                            price=order.price,
+                            client_order_id=order.client_order_id,
+                            status=order.status,
+                        )
+                    )
+                    self.orders.append(order)
+                    if client_order_id:
+                        self._by_client_id[client_order_id] = order
+                    self._apply_fill(order)
+                    return order
             except Exception as exc:
-                self._connection.rollback()
                 try:
                     self._reload_from_database()
                 except Exception as recovery_exc:
@@ -208,13 +195,13 @@ class PaperBroker:
     def refresh(self) -> None:
         """Reload persistent state so another broker instance's commits are visible."""
         with self._lock:
-            if self._connection is not None:
+            if self._repository is not None:
                 self._reload_from_database()
 
     def reconcile(self, *, refresh: bool = True) -> PaperReconciliation:
         """Verify that the current positions are exactly reproducible from orders."""
         with self._lock:
-            if refresh and self._connection is not None:
+            if refresh and self._repository is not None:
                 self._reload_from_database()
 
             errors: list[str] = []
@@ -275,27 +262,26 @@ class PaperBroker:
         restored_by_client_id: dict[str, PaperOrder] = {}
         restored_positions: dict[str, PaperPosition] = {}
 
-        rows = self._connection.execute(
-            "SELECT id, symbol, side, quantity, price, client_order_id, status "
-            "FROM paper_orders ORDER BY rowid"
-        ).fetchall()
+        assert self._repository is not None
+
+        rows = self._repository.load_orders()
         for row in rows:
             try:
-                quantity = float(row[3])
-                price = float(row[4])
+                quantity = float(row.quantity)
+                price = float(row.price)
             except (TypeError, ValueError, OverflowError) as exc:
                 raise ValueError(
                     "paper ledger contains invalid numeric data"
                 ) from exc
 
             order = PaperOrder(
-                symbol=str(row[1]).strip().upper(),
-                side=str(row[2]).strip().lower(),
+                symbol=str(row.symbol).strip().upper(),
+                side=str(row.side).strip().lower(),
                 quantity=quantity,
                 price=price,
-                client_order_id=row[5],
-                id=row[0],
-                status=row[6],
+                client_order_id=row.client_order_id,
+                id=row.id,
+                status=row.status,
             )
             if order.status != "FILLED":
                 raise ValueError("paper ledger contains unsupported order status")
@@ -392,6 +378,6 @@ class PaperBroker:
 
     def close(self) -> None:
         with self._lock:
-            if self._connection is not None:
-                self._connection.close()
-                self._connection = None
+            if self._repository is not None:
+                self._repository.close()
+                self._repository = None
