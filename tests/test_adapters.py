@@ -129,3 +129,47 @@ def test_binance_spot_testnet_adapter_has_no_withdrawal_capability():
     account = adapter.account_snapshot()
     assert account.can_trade is False
     assert account.can_withdraw is False
+
+
+def test_binance_market_data_rejects_non_trading_symbol():
+    def opener(request, timeout):
+        return _Response({
+            "symbols": [{
+                "symbol": "BTCUSDT",
+                "baseAsset": "BTC",
+                "quoteAsset": "USDT",
+                "status": "BREAK",
+                "filters": [
+                    {"filterType": "LOT_SIZE", "minQty": "0.001", "stepSize": "0.001"},
+                    {"filterType": "PRICE_FILTER", "tickSize": "0.01"},
+                    {"filterType": "MIN_NOTIONAL", "minNotional": "10"},
+                ],
+            }]
+        })
+
+    from trading.market import BinanceMarketData
+
+    with pytest.raises(ValueError, match="not trading"):
+        BinanceMarketData(opener=opener).exchange_info("BTCUSDT")
+
+
+def test_binance_market_data_rejects_unusable_quantity_filter():
+    def opener(request, timeout):
+        return _Response({
+            "symbols": [{
+                "symbol": "BTCUSDT",
+                "baseAsset": "BTC",
+                "quoteAsset": "USDT",
+                "status": "TRADING",
+                "filters": [
+                    {"filterType": "LOT_SIZE", "minQty": "0", "stepSize": "0"},
+                    {"filterType": "PRICE_FILTER", "tickSize": "0.01"},
+                    {"filterType": "MIN_NOTIONAL", "minNotional": "10"},
+                ],
+            }]
+        })
+
+    from trading.market import BinanceMarketData
+
+    with pytest.raises(ValueError, match="quantity filters"):
+        BinanceMarketData(opener=opener).exchange_info("BTCUSDT")
