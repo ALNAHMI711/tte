@@ -39,6 +39,21 @@ def test_paper_client_order_id_is_idempotent():
     assert broker.position("BTCUSDT").quantity == 1
 
 
+def test_paper_rejects_conflicting_client_order_id_reuse():
+    broker = PaperBroker()
+    broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="strategy-2")
+    with pytest.raises(ValueError, match="different order"):
+        broker.submit("BTCUSDT", "buy", 2, 100, client_order_id="strategy-2")
+
+
+def test_paper_ignores_blank_client_order_id():
+    broker = PaperBroker()
+    first = broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="   ")
+    second = broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="   ")
+    assert first is not second
+    assert len(broker.orders) == 2
+
+
 def test_paper_rejects_invalid_side_and_prices():
     broker = PaperBroker()
     with pytest.raises(ValueError, match="side"):
