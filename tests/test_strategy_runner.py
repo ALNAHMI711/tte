@@ -75,3 +75,30 @@ def test_runner_uses_exit_signal_for_existing_position():
     assert result.order is not None
     assert result.order.side == "sell"
     assert engine.paper.position("BTCUSDT") is None
+
+
+class OneShotStrategy:
+    def __init__(self):
+        self.calls = 0
+
+    def evaluate(self, context):
+        self.calls += 1
+        from trading.strategy import StrategyAction
+        return StrategyAction.ENTER_LONG if self.calls == 1 else StrategyAction.HOLD
+
+
+def test_runner_evaluates_strategy_only_once():
+    engine = ExecutionEngine()
+    strategy = OneShotStrategy()
+    runner = StrategyRunner(engine, strategy)
+
+    result = runner.run(
+        StrategyContext("BTCUSDT", candles([10, 9, 8, 7, 20]), False),
+        RiskContext(),
+        quantity=0.01,
+        price=1000,
+    )
+
+    assert strategy.calls == 1
+    assert result.action == "enter_long"
+    assert result.order is not None
