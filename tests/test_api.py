@@ -198,3 +198,21 @@ def test_market_stream_rejects_malformed_symbol_after_authentication():
         with client.websocket_connect("/market/stream?symbol=BTC-USDT&timeframe=1m"):
             pass
     assert getattr(exc.value, "code", None) == 1008
+
+def test_authentication_events_are_persisted_without_credentials():
+    auth = AuthenticationService(
+        {"admin": credential_from_password("admin", PASSWORD)},
+        SessionStore(ttl_seconds=100, step_up_seconds=10),
+    )
+    with SQLiteAuditStore(__import__("pathlib").Path("/tmp/tte-api-auth-audit.sqlite3")) as store:
+        client = TestClient(create_app(auth, audit_store=store), base_url="https://testserver")
+        failed = client.post("/login", json={"user_id": "admin", "password": "wrong password"}, headers={"x-request-id": "login-fail-1"})
+        assert failed.status_code == 401
+        csrf = client.get("/csrf").json()["csrf_token"]
+        ok = client.post("/login", json={"user_id": "admin", "password": PASSWORD}, headers={"x-request-id": "login-ok-1"})
+        assert ok.status_code == 200
+        events = store.list(limit=10)
+        assert any(event.action == "login" and event.outcome == "failed" and event.request_id == "login-fail-1" for event in events)
+        assert any(event.action == "login" and event.outcome == "success" and event.request_id == "login-ok-1" for event in events)
+        assert "correct horse battery staple" not in str(events)
+
