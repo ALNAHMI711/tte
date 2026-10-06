@@ -1,3 +1,3 @@
 """TTE trading core."""
 
-__all__ = ["backtest", "config", "paper", "risk", "strategy"]
+__all__ = ["backtest", "config", "paper", "risk", "strategy", "strategy_catalog"]
