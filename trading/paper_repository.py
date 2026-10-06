@@ -68,7 +68,7 @@ class PostgresPaperLedgerRepository:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 "SELECT id, symbol, side, quantity, price, client_order_id, status "
-                "FROM paper_orders ORDER BY id"
+                "FROM paper_orders ORDER BY sequence"
             )
             return tuple(PaperOrderRecord(*row) for row in cursor.fetchall())
 
