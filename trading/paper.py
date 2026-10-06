@@ -101,6 +101,12 @@ class PaperBroker:
         else:
             self._positions[order.symbol] = PaperPosition(order.symbol, remaining, current.average_price)
 
+    def order_by_client_id(self, client_order_id: str) -> PaperOrder | None:
+        normalized = client_order_id.strip()
+        if not normalized:
+            return None
+        return self._by_client_id.get(normalized)
+
     def position(self, symbol: str) -> PaperPosition | None:
         return self._positions.get(symbol.strip().upper())
 
