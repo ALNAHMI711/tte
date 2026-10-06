@@ -96,6 +96,24 @@ class PostgresPaperLedgerRepository:
         self.connection.close()
 
 
+def open_paper_ledger_repository(*, backend: str, path: str = "", dsn: str = "") -> PaperLedgerRepository:
+    """Open the configured paper ledger backend with fail-closed validation."""
+    normalized = backend.strip().lower()
+    if normalized == "sqlite":
+        if dsn:
+            raise ValueError("PAPER_STORE_DSN is only valid with postgresql backend")
+        if not path:
+            raise ValueError("PAPER_STORE_PATH is required for sqlite paper storage")
+        return SQLitePaperLedgerRepository.open(path)
+    if normalized == "postgresql":
+        if path:
+            raise ValueError("PAPER_STORE_PATH is only valid with sqlite backend")
+        if not dsn:
+            raise ValueError("PAPER_STORE_DSN is required for postgresql paper storage")
+        return PostgresPaperLedgerRepository.open(dsn)
+    raise ValueError("PAPER_STORE_BACKEND must be sqlite or postgresql")
+
+
 @dataclass(frozen=True)
 class SQLitePaperLedgerRepository:
     """SQLite implementation of the paper-ledger persistence contract."""
