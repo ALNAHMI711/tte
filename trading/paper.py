@@ -149,10 +149,15 @@ class PaperBroker:
                 self._apply_fill(order)
                 self._connection.commit()
                 return order
-            except Exception:
+            except Exception as exc:
                 self._connection.rollback()
-                self._reload_from_database()
-                raise
+                try:
+                    self._reload_from_database()
+                except Exception as recovery_exc:
+                    raise RuntimeError(
+                        "paper ledger recovery failed after transaction error"
+                    ) from recovery_exc
+                raise exc
 
     def _submit_memory(
         self,
@@ -239,35 +244,18 @@ class PaperBroker:
                         )
                     seen_client_ids.add(order.client_order_id)
 
-                current = rebuilt.get(order.symbol)
+                self._validate_fill_against(
+                    rebuilt, order.symbol, order.side, order.quantity
+                )
                 if order.side == "sell":
+                    current = rebuilt.get(order.symbol)
                     if current is None or order.quantity > current.quantity:
                         errors.append(
                             f"order {order.id} oversells {order.symbol}"
                         )
                         continue
-                    remaining = current.quantity - order.quantity
-                    if remaining <= 0:
-                        rebuilt.pop(order.symbol, None)
-                    else:
-                        rebuilt[order.symbol] = PaperPosition(
-                            order.symbol, remaining, current.average_price
-                        )
-                    continue
 
-                if current is None:
-                    rebuilt[order.symbol] = PaperPosition(
-                        order.symbol, order.quantity, order.price
-                    )
-                else:
-                    total_qty = current.quantity + order.quantity
-                    average = (
-                        (current.quantity * current.average_price)
-                        + (order.quantity * order.price)
-                    ) / total_qty
-                    rebuilt[order.symbol] = PaperPosition(
-                        order.symbol, total_qty, average
-                    )
+                self._apply_fill_to(rebuilt, order)
 
             if rebuilt != self._positions:
                 errors.append("positions do not match the filled-order ledger")
@@ -381,30 +369,7 @@ class PaperBroker:
             )
 
     def _apply_fill(self, order: PaperOrder) -> None:
-        current = self._positions.get(order.symbol)
-        if order.side == "buy":
-            if current is None:
-                self._positions[order.symbol] = PaperPosition(
-                    order.symbol, order.quantity, order.price
-                )
-                return
-            total_qty = current.quantity + order.quantity
-            average = (
-                (current.quantity * current.average_price)
-                + (order.quantity * order.price)
-            ) / total_qty
-            self._positions[order.symbol] = PaperPosition(
-                order.symbol, total_qty, average
-            )
-            return
-
-        remaining = current.quantity - order.quantity if current else 0.0
-        if remaining <= 0:
-            self._positions.pop(order.symbol, None)
-        else:
-            self._positions[order.symbol] = PaperPosition(
-                order.symbol, remaining, current.average_price
-            )
+        self._apply_fill_to(self._positions, order)
 
     def order_by_client_id(self, client_order_id: str) -> PaperOrder | None:
         normalized = client_order_id.strip()
