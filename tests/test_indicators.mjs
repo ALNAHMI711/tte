@@ -45,3 +45,11 @@ test("Stochastic is aligned and bounded",()=>{
 test("ROC preserves alignment",()=>{
   const x=roc(closes,12); assert.equal(x.length,closes.length); assert.equal(x.slice(0,12).every(v=>v===null),true);
 });
+
+
+import { latestPoint } from "../frontend/indicator-renderer.js";
+
+test("latestPoint skips warmup nulls and preserves candle time",()=>{
+  assert.deepEqual(latestPoint([{time:1},{time:2},{time:3}], [null, 4, null]), {time:2,value:4});
+  assert.equal(latestPoint([{time:1}], [null]), null);
+});
