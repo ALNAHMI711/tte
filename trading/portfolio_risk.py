@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+
 from .paper import PaperBroker
 
 
@@ -14,17 +16,18 @@ class PortfolioExposure:
 def portfolio_exposure(broker: PaperBroker, prices: dict[str, float]) -> PortfolioExposure:
     """Value current paper positions at supplied market prices.
 
-    Missing prices are ignored rather than guessed. This is deliberately
-    read-only; the broker remains the source of truth for position quantities.
+    Every open position must have a valid mark price. Silently omitting a
+    position would understate exposure and could bypass the exposure limit.
+    This is deliberately read-only; the broker remains the source of truth.
     """
     gross = 0.0
     symbols: list[str] = []
     for position in broker.positions():
         price = prices.get(position.symbol)
         if price is None:
-            continue
-        if price <= 0:
-            raise ValueError(f"price for {position.symbol} must be positive")
+            raise ValueError(f"missing market price for {position.symbol}")
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError(f"price for {position.symbol} must be finite and positive")
         gross += position.quantity * price
         symbols.append(position.symbol)
     return PortfolioExposure(gross_notional=gross, symbols=tuple(symbols))
