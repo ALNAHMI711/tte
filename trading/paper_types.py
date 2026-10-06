@@ -9,7 +9,7 @@ class PaperOrderRecord:
     id: str
     symbol: str
     side: str
-    quantity: object
-    price: object
+    quantity: float | int | None
+    price: float | int | None
     client_order_id: str | None
     status: str
