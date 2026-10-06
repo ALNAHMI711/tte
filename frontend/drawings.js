@@ -17,7 +17,11 @@ export class DrawingManager {
   up(e){if(!this.drag)return;this.items.push({...this.drag});this.drag=null;this.mode="select";this.host.releasePointerCapture?.(e.pointerId);this.render()}
   clear(){this.items=[];this.render()}
   serialize(){return this.items.map(({type,p1,p2})=>({type,p1,p2}))}
-  restore(items){this.items=Array.isArray(items)?items.filter(d=>MODES.has(d?.type)&&d?.p1&&d?.p2):[];this.render()}
+  restore(items){
+ this.items=Array.isArray(items)?items.filter(d=>MODES.has(d?.type)&&this.validPoint(d?.p1)&&this.validPoint(d?.p2)).map(d=>({type:d.type,p1:{logical:Number(d.p1.logical),price:Number(d.p1.price)},p2:{logical:Number(d.p2.logical),price:Number(d.p2.price)}})):[];
+ this.render()
+}
+validPoint(p){return p&&Number.isFinite(Number(p.logical))&&Number.isFinite(Number(p.price))}
   coords(p){return{x:this.chart.timeScale().logicalToCoordinate(p.logical),y:this.chart.priceScale("right").priceToCoordinate(p.price)}}
   render(){
     this.svg.replaceChildren();const all=this.drag?[...this.items,this.drag]:this.items;
