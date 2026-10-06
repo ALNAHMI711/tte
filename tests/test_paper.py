@@ -85,3 +85,31 @@ def test_paper_sqlite_ledger_rejects_corrupt_sell(tmp_path):
 
     with pytest.raises(ValueError, match="invalid sell"):
         PaperBroker(str(path))
+
+
+def test_paper_sqlite_ledger_normalizes_restored_symbol_and_side(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker._connection.execute(
+        "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("seed", "btcusdt", "buy", 1, 100, None, "FILLED"),
+    )
+    broker._connection.commit()
+
+    restored = PaperBroker(str(path))
+    assert restored.position("BTCUSDT").quantity == 1
+    assert restored.orders[0].symbol == "BTCUSDT"
+    assert restored.orders[0].side == "buy"
+
+
+def test_paper_sqlite_ledger_rejects_non_filled_status(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker._connection.execute(
+        "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("pending", "BTCUSDT", "buy", 1, 100, None, "NEW"),
+    )
+    broker._connection.commit()
+
+    with pytest.raises(ValueError, match="unsupported order status"):
+        PaperBroker(str(path))
