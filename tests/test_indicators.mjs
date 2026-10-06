@@ -100,3 +100,20 @@ test("calculated indicator values remain finite after warmup",()=>{
     ...roc(closes,12).slice(12),
   ]) assert.ok(value === null || Number.isFinite(value));
 });
+
+
+test("indicator registry exposes every catalog entry with aligned output", async () => {
+  const { INDICATOR_REGISTRY, INDICATOR_LIST } = await import("../frontend/indicator-registry.js");
+  assert.equal(INDICATOR_LIST.length, 12);
+  for (const definition of INDICATOR_LIST) {
+    assert.equal(INDICATOR_REGISTRY[definition.id], definition);
+    const result = definition.calculate(candles);
+    if (definition.multi) {
+      assert.equal(result.line.length, candles.length);
+      assert.equal(result.signal.length, candles.length);
+      assert.equal(result.histogram.length, candles.length);
+    } else {
+      assert.equal(result.length, candles.length);
+    }
+  }
+});
