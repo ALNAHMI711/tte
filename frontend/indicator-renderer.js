@@ -21,3 +21,31 @@ export function renderIndicator(chart, registry, id, rows, lineFactory) {
   created.push(lineFactory(alignedSeries(rows, result), definition.kind === "oscillator" ? 1 : 0, { title: definition.name, ...(definition.min != null ? { autoscaleInfoProvider: () => ({ priceRange: { minValue: definition.min, maxValue: definition.max } }) } : {}) }));
   return created;
 }
+
+
+function latestPoint(rows, values) {
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (values[i] != null && rows[i]) return { time: rows[i].time, value: values[i] };
+  }
+  return null;
+}
+
+export function updateIndicator(registry, id, rows, series) {
+  if (id === "none" || !rows.length || !series.length) return;
+  const definition = registry[id];
+  if (!definition) return;
+  const result = definition.calculate(rows);
+  if (definition.multi) {
+    const points = [
+      latestPoint(rows, result.line),
+      latestPoint(rows, result.signal),
+      latestPoint(rows, result.histogram),
+    ];
+    points.forEach((point, index) => {
+      if (point && series[index]) series[index].update(point);
+    });
+    return;
+  }
+  const point = latestPoint(rows, result);
+  if (point) series[0].update(point);
+}
