@@ -244,9 +244,6 @@ class PaperBroker:
                         )
                     seen_client_ids.add(order.client_order_id)
 
-                self._validate_fill_against(
-                    rebuilt, order.symbol, order.side, order.quantity
-                )
                 if order.side == "sell":
                     current = rebuilt.get(order.symbol)
                     if current is None or order.quantity > current.quantity:
