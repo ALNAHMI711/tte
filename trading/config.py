@@ -53,8 +53,11 @@ class Settings:
             raise ValueError("PAPER_STORE_DSN is required when PAPER_STORE_BACKEND=postgresql")
         if self.paper_store_backend == "sqlite" and self.paper_store_dsn:
             raise ValueError("PAPER_STORE_DSN is only valid with PAPER_STORE_BACKEND=postgresql")
-        if self.paper_trading and self.app_env.strip().lower() in {"production", "prod"} and not self.paper_store_path:
-            raise ValueError("production paper trading requires PAPER_STORE_PATH")
+        if self.paper_trading and self.app_env.strip().lower() in {"production", "prod"}:
+            if self.paper_store_backend == "sqlite" and not self.paper_store_path:
+                raise ValueError("production paper trading requires PAPER_STORE_PATH")
+            if self.paper_store_backend == "postgresql" and not self.paper_store_dsn:
+                raise ValueError("production paper trading requires PAPER_STORE_DSN")
         if self.paper_store_path and not Path(self.paper_store_path).is_absolute() and self.app_env.strip().lower() in {"production", "prod"}:
             raise ValueError("production PAPER_STORE_PATH must be an absolute path")
         if self.session_store_backend == "sqlite" and not self.session_store_path:
