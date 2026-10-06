@@ -2,11 +2,11 @@
 
 ## الحالة الحالية
 - المرحلة: Core + Security + Health + Market + Paper Execution foundation
-- الفرع: `foundation-v1`
+- الفرع: `feat/paper-atomic-ledger`
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
 - أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
-- آخر دفعة: جعل Paper Trading قابلاً للاستعادة عبر SQLite مع idempotency واختبار فساد السجل؛ Live ما زال مقفولاً.
+- آخر دفعة: ربط مصدر Binance Spot Testnet للبيانات السوقية بمسار Filters → Risk → Paper مع منع LIVE، وإضافة فحوص fail-closed لبيانات الرمز؛ Live ما زال مقفولاً.
 
 ## لوحة المتابعة
 | المجال | الحالة |
@@ -15,14 +15,14 @@
 | الأمان وإدارة الأسرار | 62% |
 | لوحة التحكم RTL | 10% |
 | المحافظ والمنصات | 0% |
-| محرك السوق | 15% |
+| محرك السوق | 22% |
 | الاستراتيجيات | 0% |
 | إدارة المخاطر | 25% |
-| التنفيذ | 20% |
+| التنفيذ | 28% |
 | Paper Trading | 40% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
-| الاختبارات | 44% |
+| الاختبارات | 48% |
 | التوثيق | 20% |
 
 **التقدم الإجمالي التقريبي: 31%**
@@ -45,10 +45,10 @@
 لا يتم فتح Live Trading حتى تنجح اختبارات الأمان، المصادقة، الأسرار، البيانات، المخاطر، التنفيذ، Paper Trading، وفحوصات CI بدون أخطاء حرجة، ثم اجتياز فحوص Binance Trusted IP والصلاحيات.
 
 ## الخطوات التالية ذات الأولوية
-1. تحسين Paper ledger إلى طبقة repository/transaction آمنة، ثم الانتقال لاحقاً إلى PostgreSQL.
+1. إكمال طبقة Paper repository/transaction واختبارات recovery/reconciliation، ثم الانتقال لاحقاً إلى PostgreSQL.
 2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
 3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
-4. بناء عقود Exchange Adapter وMarket Data ثم Binance Testnet.
+4. توسيع عقد Exchange Adapter/Market Data إلى دورة بيانات سوقية كاملة مع اختبارات انقطاع/بيانات غير صالحة.
 5. توسيع Risk Engine إلى حدود المستخدم المطلوبة: 0.5%/صفقة، خسارة يومية/أسبوعية، التعرض، correlation وkill switch.
 6. استراتيجية/Backtest/Paper reconciliation ثم لوحة RTL.
 7. فحوصات أمنية CI مثل dependency audit وsecret scanning وstatic analysis.
