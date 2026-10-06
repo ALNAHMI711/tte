@@ -291,11 +291,19 @@ class PaperBroker:
             "FROM paper_orders ORDER BY rowid"
         ).fetchall()
         for row in rows:
+            try:
+                quantity = float(row[3])
+                price = float(row[4])
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError(
+                    "paper ledger contains invalid numeric data"
+                ) from exc
+
             order = PaperOrder(
                 symbol=str(row[1]).strip().upper(),
                 side=str(row[2]).strip().lower(),
-                quantity=float(row[3]),
-                price=float(row[4]),
+                quantity=quantity,
+                price=price,
                 client_order_id=row[5],
                 id=row[0],
                 status=row[6],
