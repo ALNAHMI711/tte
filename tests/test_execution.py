@@ -170,3 +170,26 @@ def test_execution_allows_sell_when_it_reduces_portfolio_exposure():
 
     assert order.status == "FILLED"
     assert engine.paper.position("BTCUSDT").quantity == 0.05
+
+
+def test_execution_requires_market_prices_when_positions_exist():
+    engine = ExecutionEngine()
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+
+    with pytest.raises(RiskRejected, match="market prices"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "buy", 0.01, 1000),
+            RiskContext(),
+        )
+
+
+def test_execution_rejects_invalid_side_before_exposure_calculation():
+    engine = ExecutionEngine()
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+
+    with pytest.raises(RiskRejected, match="side must be buy or sell"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "hold", 0.01, 1000),
+            RiskContext(),
+            market_prices={"BTCUSDT": 1000},
+        )
