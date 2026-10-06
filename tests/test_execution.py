@@ -193,3 +193,90 @@ def test_execution_rejects_invalid_side_before_exposure_calculation():
             RiskContext(),
             market_prices={"BTCUSDT": 1000},
         )
+
+
+class _Adapter:
+    from trading.adapters import AdapterCapabilities, AccountSnapshot, SymbolInfo, TradingEnvironment
+
+    environment = TradingEnvironment.TESTNET
+    capabilities = AdapterCapabilities(market_data=True, spot=True)
+
+    def __init__(self):
+        self.calls = []
+
+    def account_snapshot(self):
+        self.calls.append("account")
+        return AccountSnapshot("paper-source", TradingEnvironment.TESTNET, False, False)
+
+    def symbol_info(self, symbol):
+        self.calls.append(("symbol_info", symbol))
+        return SYMBOL
+
+    def ticker(self, symbol):
+        self.calls.append(("ticker", symbol))
+        return (99.0, 101.0)
+
+    def submit_order(self, request):
+        self.calls.append(("submit_order", request))
+        raise AssertionError("adapter order routing must never be called")
+
+
+def test_execution_adapter_path_is_read_only_and_routes_to_paper():
+    engine = ExecutionEngine()
+    adapter = _Adapter()
+
+    order = engine.submit_from_adapter(
+        OrderRequest("BTCUSDT", "buy", 0.01, 1000),
+        RiskContext(),
+        adapter,
+    )
+
+    assert order.status == "FILLED"
+    assert engine.paper.position("BTCUSDT").quantity == 0.01
+    assert not any(isinstance(call, tuple) and call[0] == "submit_order" for call in adapter.calls)
+
+
+def test_execution_adapter_path_fetches_marks_for_existing_positions():
+    engine = ExecutionEngine()
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+    adapter = _Adapter()
+
+    order = engine.submit_from_adapter(
+        OrderRequest("BTCUSDT", "sell", 0.005, 1000),
+        RiskContext(),
+        adapter,
+    )
+
+    assert order.status == "FILLED"
+    assert engine.paper.position("BTCUSDT").quantity == 0.005
+    assert ("ticker", "BTCUSDT") in adapter.calls
+
+
+def test_execution_adapter_path_applies_exchange_filters_before_paper():
+    engine = ExecutionEngine()
+    adapter = _Adapter()
+
+    with pytest.raises(OrderFilterError, match="notional"):
+        engine.submit_from_adapter(
+            OrderRequest("BTCUSDT", "buy", 0.001, 100),
+            RiskContext(),
+            adapter,
+        )
+
+    assert engine.paper.orders == ()
+
+
+def test_execution_adapter_path_rejects_live_before_adapter_submission():
+    class LiveAdapter(_Adapter):
+        environment = TradingEnvironment.LIVE
+
+    engine = ExecutionEngine()
+    adapter = LiveAdapter()
+
+    with pytest.raises(RuntimeError, match="LIVE adapter routing"):
+        engine.submit_from_adapter(
+            OrderRequest("BTCUSDT", "buy", 0.01, 1000),
+            RiskContext(),
+            adapter,
+        )
+    assert adapter.calls == []
