@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .execution import ExecutionEngine, OrderRequest
+from .execution import ExecutionEngine
 from .risk import RiskContext
 from .strategy import RuntimeStrategy, StrategyContext
 from .strategy_catalog import build_order_request
