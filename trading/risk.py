@@ -65,6 +65,14 @@ class RiskContext:
 class RiskRejected(Exception):
     """Raised when the risk engine refuses an order."""
 
+    def __init__(self, message: str, *, code: str = "RISK_REJECTED") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _reject(message: str, code: str) -> None:
+    raise RiskRejected(message, code=code)
+
 
 def validate_order(
     notional: float,
@@ -81,59 +89,59 @@ def validate_order(
     reward_risk_ratio: float | None = 2.0,
 ) -> None:
     if ctx.emergency_stop:
-        raise RiskRejected("emergency stop is active")
+        _reject("emergency stop is active", "EMERGENCY_STOP")
     if not math.isfinite(notional) or notional <= 0:
-        raise RiskRejected("order notional must be positive")
+        _reject("order notional must be positive", "INVALID_NOTIONAL")
     if signal_score is not None and not math.isfinite(signal_score):
-        raise RiskRejected("signal score must be finite")
+        _reject("signal score must be finite", "INVALID_SIGNAL_SCORE")
     if signal_score is None or signal_score < limits.min_signal_score:
-        raise RiskRejected("signal score is below minimum")
+        _reject("signal score is below minimum", "SIGNAL_SCORE_TOO_LOW")
     if reward_risk_ratio is not None and not math.isfinite(reward_risk_ratio):
-        raise RiskRejected("reward-risk ratio must be finite")
+        _reject("reward-risk ratio must be finite", "INVALID_REWARD_RISK")
     if reward_risk_ratio is None or reward_risk_ratio < limits.min_reward_risk:
-        raise RiskRejected("reward-risk ratio is below minimum")
+        _reject("reward-risk ratio is below minimum", "REWARD_RISK_TOO_LOW")
     if notional > limits.max_order_notional:
-        raise RiskRejected("order exceeds max order notional")
+        _reject("order exceeds max order notional", "MAX_ORDER_NOTIONAL")
     if ctx.daily_loss >= limits.max_daily_loss:
-        raise RiskRejected("daily loss limit reached")
+        _reject("daily loss limit reached", "DAILY_LOSS_LIMIT")
     if ctx.weekly_loss >= limits.max_weekly_loss:
-        raise RiskRejected("weekly loss limit reached")
+        _reject("weekly loss limit reached", "WEEKLY_LOSS_LIMIT")
     if (exposure_delta is None or exposure_delta > 0) and ctx.open_positions >= limits.max_open_positions:
-        raise RiskRejected("maximum open positions reached")
+        _reject("maximum open positions reached", "MAX_OPEN_POSITIONS")
     projected_exposure = ctx.open_exposure + (notional if exposure_delta is None else exposure_delta)
     if projected_exposure < 0:
-        raise RiskRejected("projected open exposure cannot be negative")
+        _reject("projected open exposure cannot be negative", "NEGATIVE_PROJECTED_EXPOSURE")
     if projected_exposure > limits.max_open_exposure:
-        raise RiskRejected("open exposure limit reached")
+        _reject("open exposure limit reached", "MAX_OPEN_EXPOSURE")
     projected_correlation = ctx.correlation_exposure + (notional if exposure_delta is None else max(exposure_delta, 0.0))
     if projected_correlation > limits.max_correlation_exposure:
-        raise RiskRejected("correlation exposure limit reached")
+        _reject("correlation exposure limit reached", "MAX_CORRELATION_EXPOSURE")
     if ctx.estimated_slippage_bps > limits.max_slippage_bps:
-        raise RiskRejected("estimated slippage is too high")
+        _reject("estimated slippage is too high", "MAX_SLIPPAGE")
 
     if side is not None and entry_price is not None and stop_loss_price is not None:
         normalized_side = side.strip().lower()
         if normalized_side not in {"buy", "sell"}:
-            raise RiskRejected("side must be buy or sell")
+            _reject("side must be buy or sell", "INVALID_SIDE")
         if not math.isfinite(entry_price) or entry_price <= 0:
-            raise RiskRejected("entry price must be positive")
+            _reject("entry price must be positive", "INVALID_ENTRY_PRICE")
         if not math.isfinite(stop_loss_price) or stop_loss_price <= 0:
-            raise RiskRejected("stop loss price must be positive")
+            _reject("stop loss price must be positive", "INVALID_STOP_LOSS")
         if normalized_side == "buy" and stop_loss_price >= entry_price:
-            raise RiskRejected("long stop loss must be below entry price")
+            _reject("long stop loss must be below entry price", "INVALID_LONG_STOP")
         if normalized_side == "sell" and stop_loss_price <= entry_price:
-            raise RiskRejected("short stop loss must be above entry price")
+            _reject("short stop loss must be above entry price", "INVALID_SHORT_STOP")
 
     if account_equity is None:
         return
     if not math.isfinite(account_equity) or account_equity <= 0:
-        raise RiskRejected("account equity must be positive")
+        _reject("account equity must be positive", "INVALID_ACCOUNT_EQUITY")
     if entry_price is None or stop_loss_price is None or quantity is None:
-        raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
+        _reject("entry, stop loss and quantity are required for risk-per-trade validation", "MISSING_RISK_INPUTS")
     if not all(math.isfinite(value) for value in (entry_price, stop_loss_price, quantity)) or entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
-        raise RiskRejected("entry, stop loss and quantity must be positive")
+        _reject("entry, stop loss and quantity must be positive", "INVALID_RISK_INPUTS")
 
     risk_amount = abs(entry_price - stop_loss_price) * quantity
     risk_budget = account_equity * (limits.risk_per_trade_pct / 100)
     if risk_amount > risk_budget:
-        raise RiskRejected("order exceeds risk-per-trade budget")
+        _reject("order exceeds risk-per-trade budget", "RISK_PER_TRADE_LIMIT")
