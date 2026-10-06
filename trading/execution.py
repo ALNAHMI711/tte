@@ -73,6 +73,13 @@ class ExecutionEngine:
             final_quantity = float(normalized.quantity)
             final_price = float(normalized.price)
 
+        normalized_side = request.side.strip().lower()
+        if normalized_side not in {"buy", "sell"}:
+            raise RiskRejected("side must be buy or sell")
+
+        if self.paper.positions() and market_prices is None:
+            raise RiskRejected("market prices are required when open positions exist")
+
         notional = final_quantity * final_price
         risk_context = context
         if market_prices is not None:
@@ -87,7 +94,6 @@ class ExecutionEngine:
                 correlation_exposure=context.correlation_exposure,
                 emergency_stop=context.emergency_stop,
             )
-        normalized_side = request.side.strip().lower()
         exposure_delta = notional if normalized_side == "buy" else -notional
         validate_order(
             notional,
@@ -97,7 +103,7 @@ class ExecutionEngine:
             entry_price=final_price,
             stop_loss_price=stop_loss_price,
             quantity=final_quantity,
-            side=request.side,
+            side=normalized_side,
             exposure_delta=exposure_delta,
         )
         if settings.live_trading:
@@ -106,7 +112,7 @@ class ExecutionEngine:
             raise RuntimeError("paper trading must be enabled")
         return self.paper.submit(
             request.symbol,
-            request.side,
+            normalized_side,
             final_quantity,
             final_price,
             request.client_order_id,
