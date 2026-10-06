@@ -87,15 +87,20 @@ def validate_order(
     exposure_delta: float | None = None,
     signal_score: float | None = 85.0,
     reward_risk_ratio: float | None = 2.0,
+    strict: bool = False,
 ) -> None:
     if ctx.emergency_stop:
         _reject("emergency stop is active", "EMERGENCY_STOP")
     if not math.isfinite(notional) or notional <= 0:
         _reject("order notional must be positive", "INVALID_NOTIONAL")
+    if strict and signal_score is None:
+        _reject("signal score is required", "MISSING_SIGNAL_SCORE")
     if signal_score is not None and not math.isfinite(signal_score):
         _reject("signal score must be finite", "INVALID_SIGNAL_SCORE")
     if signal_score is None or signal_score < limits.min_signal_score:
         _reject("signal score is below minimum", "SIGNAL_SCORE_TOO_LOW")
+    if strict and reward_risk_ratio is None:
+        _reject("reward-risk ratio is required", "MISSING_REWARD_RISK")
     if reward_risk_ratio is not None and not math.isfinite(reward_risk_ratio):
         _reject("reward-risk ratio must be finite", "INVALID_REWARD_RISK")
     if reward_risk_ratio is None or reward_risk_ratio < limits.min_reward_risk:
@@ -118,6 +123,9 @@ def validate_order(
         _reject("correlation exposure limit reached", "MAX_CORRELATION_EXPOSURE")
     if ctx.estimated_slippage_bps > limits.max_slippage_bps:
         _reject("estimated slippage is too high", "MAX_SLIPPAGE")
+
+    if strict and (side is None or entry_price is None or stop_loss_price is None):
+        _reject("side, entry price and stop loss are required", "MISSING_PROTECTIVE_INPUTS")
 
     if side is not None and entry_price is not None and stop_loss_price is not None:
         normalized_side = side.strip().lower()
