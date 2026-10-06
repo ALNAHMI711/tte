@@ -77,6 +77,18 @@ class ExecutionEngine:
         if normalized_side not in {"buy", "sell"}:
             raise RiskRejected("side must be buy or sell")
 
+        if request.client_order_id:
+            existing = self.paper.order_by_client_id(request.client_order_id)
+            if existing is not None:
+                if (
+                    existing.symbol != request.symbol.strip().upper()
+                    or existing.side != normalized_side
+                    or existing.quantity != final_quantity
+                    or existing.price != final_price
+                ):
+                    raise RiskRejected("client_order_id is already bound to a different order")
+                return existing
+
         if self.paper.positions() and market_prices is None:
             raise RiskRejected("market prices are required when open positions exist")
 
