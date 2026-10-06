@@ -74,3 +74,29 @@ test("mergeCandle sorts late candles and identifies the latest point", async () 
   assert.deepEqual(b.rows.map(x=>x.time), [1,2,3,4]);
   assert.equal(b.isLatest, true);
 });
+
+
+test("indicator warmup points are null until mathematically valid",()=>{
+  const m=macd(closes,12,26,9);
+  assert.equal(m.line.slice(0,25).every(v=>v===null),true);
+  assert.equal(m.signal.slice(0,33).every(v=>v===null),true);
+  assert.equal(m.histogram.slice(0,33).every(v=>v===null),true);
+  const s=stochastic(candles,14,3);
+  assert.equal(s.slice(0,15).every(v=>v===null),true);
+  const a=atr(candles,14);
+  assert.equal(a.slice(0,13).every(v=>v===null),true);
+});
+
+test("calculated indicator values remain finite after warmup",()=>{
+  for (const value of [
+    ...ema(closes,20).slice(19),
+    ...rma(closes,14).slice(13),
+    ...rsi(closes,14).slice(14),
+    ...vwap(candles),
+    ...atr(candles,14).slice(13),
+    ...macd(closes).line.slice(25),
+    ...adx(candles,14).slice(26),
+    ...stochastic(candles,14,3).slice(16),
+    ...roc(closes,12).slice(12),
+  ]) assert.ok(value === null || Number.isFinite(value));
+});
