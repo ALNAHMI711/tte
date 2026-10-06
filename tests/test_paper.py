@@ -60,3 +60,28 @@ def test_paper_rejects_invalid_side_and_prices():
         broker.submit("BTCUSDT", "hold", 1, 100)
     with pytest.raises(ValueError, match="positive"):
         broker.submit("BTCUSDT", "buy", 0, 100)
+
+
+def test_paper_sqlite_ledger_restores_orders_positions_and_idempotency(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    first = PaperBroker(str(path))
+    order = first.submit("BTCUSDT", "buy", 1, 100, client_order_id="persist-1")
+
+    restored = PaperBroker(str(path))
+    assert restored.order_by_client_id("persist-1").id == order.id
+    assert restored.position("BTCUSDT").quantity == 1
+    assert restored.submit("BTCUSDT", "buy", 1, 100, client_order_id="persist-1") is restored.order_by_client_id("persist-1")
+    assert len(restored.orders) == 1
+
+
+def test_paper_sqlite_ledger_rejects_corrupt_sell(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker._connection.execute(
+        "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("bad", "BTCUSDT", "sell", 1, 100, None, "FILLED"),
+    )
+    broker._connection.commit()
+
+    with pytest.raises(ValueError, match="invalid sell"):
+        PaperBroker(str(path))
