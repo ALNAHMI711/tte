@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -24,10 +25,10 @@ class RiskLimits:
             ("max_correlation_exposure", self.max_correlation_exposure),
         )
         for name, value in fields:
-            if value <= 0:
-                raise ValueError(f"{name} must be positive")
-        if not 0 < self.risk_per_trade_pct <= 100:
-            raise ValueError("risk_per_trade_pct must be greater than 0 and at most 100")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a finite positive number")
+        if not math.isfinite(self.risk_per_trade_pct) or not 0 < self.risk_per_trade_pct <= 100:
+            raise ValueError("risk_per_trade_pct must be finite, greater than 0 and at most 100")
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,17 @@ class RiskContext:
     estimated_slippage_bps: float = 0.0
     correlation_exposure: float = 0.0
     emergency_stop: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("daily_loss", self.daily_loss),
+            ("weekly_loss", self.weekly_loss),
+            ("open_exposure", self.open_exposure),
+            ("estimated_slippage_bps", self.estimated_slippage_bps),
+            ("correlation_exposure", self.correlation_exposure),
+        ):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be a finite non-negative number")
 
 
 class RiskRejected(Exception):
@@ -57,7 +69,7 @@ def validate_order(
 ) -> None:
     if ctx.emergency_stop:
         raise RiskRejected("emergency stop is active")
-    if notional <= 0:
+    if not math.isfinite(notional) or notional <= 0:
         raise RiskRejected("order notional must be positive")
     if notional > limits.max_order_notional:
         raise RiskRejected("order exceeds max order notional")
@@ -74,11 +86,11 @@ def validate_order(
 
     if account_equity is None:
         return
-    if account_equity <= 0:
+    if not math.isfinite(account_equity) or account_equity <= 0:
         raise RiskRejected("account equity must be positive")
     if entry_price is None or stop_loss_price is None or quantity is None:
         raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
-    if entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
+    if not all(math.isfinite(value) for value in (entry_price, stop_loss_price, quantity)) or entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
         raise RiskRejected("entry, stop loss and quantity must be positive")
 
     if side is not None:
