@@ -33,6 +33,7 @@
 - `pyproject.toml` لتثبيت الحزمة واكتشاف `trading*` بشكل صريح.
 - Argon2id لتجزئة كلمات المرور مع حد أدنى 12 حرفاً واختبارات تحقق.
 - جلسات opaque عشوائية، انتهاء صلاحية، إلغاء جلسة، وStep-up مؤقت مرتبط بالجلسة.
+- أضيف مخزن جلسات SQLite دائم: يُحفظ فقط HMAC digest للـsession token، مع استعادة بعد إعادة تشغيل، انتهاء/إلغاء، واشتراط سر جلسات عند التخزين الدائم.
 - حماية أولية لمحاولات تسجيل الدخول عبر exponential backoff وقفل مؤقت بعد عدة إخفاقات.
 - نموذج Audit Event غير قابل للتعديل لتسجيل الأحداث الأمنية دون وضع الأسرار داخل السجل.
 - سياسات HTTP: Secure/HttpOnly/SameSite cookies، CSRF tokens عشوائية ومقارنة constant-time، وIP allowlist صريح.
@@ -46,7 +47,7 @@
 
 ## الخطوات التالية ذات الأولوية
 1. إكمال طبقة Paper repository/transaction واختبارات recovery/reconciliation، ثم الانتقال لاحقاً إلى PostgreSQL.
-2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
+2. ربط مخزن الجلسات الدائم فعلياً بتهيئة HTTP/API والإقلاع، ثم إضافة اختبارات cookie/session persistence متعددة العمليات.
 3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
 4. توسيع عقد Exchange Adapter/Market Data إلى دورة بيانات سوقية كاملة مع اختبارات انقطاع/بيانات غير صالحة.
 5. توسيع Risk Engine إلى حدود المستخدم المطلوبة: 0.5%/صفقة، خسارة يومية/أسبوعية، التعرض، correlation وkill switch.
