@@ -124,4 +124,5 @@ def test_paper_broker_healthcheck_fails_after_close(tmp_path):
     broker = PaperBroker(repository=repository)
     broker.healthcheck()
     broker.close()
-    broker.healthcheck()
+    with pytest.raises(RuntimeError, match="repository is closed"):
+        broker.healthcheck()
