@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, Protocol
+from typing import ContextManager, Protocol
 import sqlite3
 
 from trading.paper_types import PaperOrderRecord
@@ -21,7 +21,7 @@ class PaperLedgerRepository(Protocol):
 
     def insert_order(self, order: PaperOrderRecord) -> None: ...
 
-    def transaction(self) -> Iterator[None]: ...
+    def transaction(self) -> ContextManager[None]: ...
 
     def close(self) -> None: ...
 
