@@ -27,11 +27,22 @@ def test_risk_context_derives_open_exposure_from_portfolio():
     assert ctx.weekly_loss == 0
 
 
-def test_missing_market_price_is_not_guessed():
+def test_missing_market_price_fails_closed():
     broker = PaperBroker()
     broker.submit("BTCUSDT", "buy", 0.05, 1000)
 
-    exposure = portfolio_exposure(broker, {})
+    import pytest
 
-    assert exposure.gross_notional == 0
-    assert exposure.symbols == ()
+    with pytest.raises(ValueError, match="missing market price"):
+        portfolio_exposure(broker, {})
+
+
+def test_non_finite_market_price_fails_closed():
+    import math
+    import pytest
+
+    broker = PaperBroker()
+    broker.submit("BTCUSDT", "buy", 0.05, 1000)
+
+    with pytest.raises(ValueError, match="finite"):
+        portfolio_exposure(broker, {"BTCUSDT": math.inf})
