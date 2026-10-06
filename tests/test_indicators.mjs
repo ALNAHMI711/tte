@@ -47,7 +47,7 @@ test("ROC preserves alignment",()=>{
 });
 
 
-import { latestPoint } from "../frontend/indicator-renderer.js";
+import { latestPoint } from "../frontend/indicator-data.js";
 
 test("latestPoint skips warmup nulls and preserves candle time",()=>{
   assert.deepEqual(latestPoint([{time:1},{time:2},{time:3}], [null, 4, null]), {time:2,value:4});
