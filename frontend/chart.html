@@ -12,16 +12,8 @@ const drawings=new DrawingManager(chart,host);
 function clearIndicator(){for(const s of series)chart.removeSeries(s);series=[];const panes=chart.panes();for(let i=panes.length-1;i>0;i--)chart.removePane(i)}
 function line(data,pane=0,options={}){const s=chart.addSeries(LineSeries,{lineWidth:2,priceLineVisible:false,lastValueVisible:false,...options},pane);s.setData(data);series.push(s);return s}
 function redraw(){
- clearIndicator();lastRenderedTime=rows.length?rows[rows.length-1].time:null;const id=indicator.value;if(id==="none"||!rows.length)return;
- const def=INDICATOR_REGISTRY[id];if(!def)return;const result=def.calculate(rows);
- const alignedValues=values=>rows.map((x,i)=>values[i]==null?null:{time:x.time,value:values[i]}).filter(Boolean);
- if(def.multi){
-   line(alignedValues(result.line),1,{title:"MACD"});
-   line(alignedValues(result.signal),1,{title:"Signal"});
-   const h=chart.addSeries(HistogramSeries,{priceLineVisible:false,lastValueVisible:false,base:0},1);
-   h.setData(alignedValues(result.histogram));series.push(h);return;
- }
- line(aligned(result),def.kind==="oscillator"?1:0,{title:def.name,...(def.min!=null?{autoscaleInfoProvider:()=>({priceRange:{minValue:def.min,maxValue:def.max}})}:{})});
+ clearIndicator();lastRenderedTime=rows.length?rows[rows.length-1].time:null;
+ series=renderIndicator(chart,INDICATOR_REGISTRY,indicator.value,rows,line);
 }
 async function load(){try{const s=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;const r=await fetch("/market/candles?symbol="+encodeURIComponent(s)+"&timeframe="+encodeURIComponent(tf)+"&limit=300");if(r.status===401){location.href="/login.html";return}if(!r.ok)throw Error();const d=await r.json();rows=d.candles||[];candles.setData(rows);redraw();chart.timeScale().fitContent();status.textContent=d.symbol+" • "+d.timeframe+" • Testnet • قراءة فقط"}catch(_){status.textContent="تعذر تحميل بيانات السوق"}}
 let marketSocket=null;
