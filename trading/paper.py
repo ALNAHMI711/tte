@@ -29,6 +29,16 @@ class PaperOrder:
     status: str = "FILLED"
 
 
+@dataclass(frozen=True)
+class PaperReconciliation:
+    """Result of checking that positions match the filled-order ledger."""
+
+    valid: bool
+    order_count: int
+    position_count: int
+    errors: tuple[str, ...] = ()
+
+
 class PaperBroker:
     """Persistent or in-memory paper ledger with deterministic fills."""
 
@@ -185,6 +195,85 @@ class PaperBroker:
     def _restore(self) -> None:
         with self._lock:
             self._reload_from_database()
+
+    def refresh(self) -> None:
+        """Reload persistent state so another broker instance's commits are visible."""
+        with self._lock:
+            if self._connection is not None:
+                self._reload_from_database()
+
+    def reconcile(self, *, refresh: bool = True) -> PaperReconciliation:
+        """Verify that the current positions are exactly reproducible from orders."""
+        with self._lock:
+            if refresh and self._connection is not None:
+                self._reload_from_database()
+
+            errors: list[str] = []
+            rebuilt: dict[str, PaperPosition] = {}
+            seen_client_ids: set[str] = set()
+
+            for order in self.orders:
+                if order.status != "FILLED":
+                    errors.append(
+                        f"order {order.id} has unsupported status {order.status!r}"
+                    )
+                    continue
+                if (
+                    not order.symbol
+                    or order.side not in VALID_SIDES
+                    or not math.isfinite(order.quantity)
+                    or order.quantity <= 0
+                    or not math.isfinite(order.price)
+                    or order.price <= 0
+                ):
+                    errors.append(f"order {order.id} contains invalid data")
+                    continue
+                if order.client_order_id:
+                    if order.client_order_id in seen_client_ids:
+                        errors.append(
+                            f"duplicate client order id {order.client_order_id!r}"
+                        )
+                    seen_client_ids.add(order.client_order_id)
+
+                current = rebuilt.get(order.symbol)
+                if order.side == "sell":
+                    if current is None or order.quantity > current.quantity:
+                        errors.append(
+                            f"order {order.id} oversells {order.symbol}"
+                        )
+                        continue
+                    remaining = current.quantity - order.quantity
+                    if remaining <= 0:
+                        rebuilt.pop(order.symbol, None)
+                    else:
+                        rebuilt[order.symbol] = PaperPosition(
+                            order.symbol, remaining, current.average_price
+                        )
+                    continue
+
+                if current is None:
+                    rebuilt[order.symbol] = PaperPosition(
+                        order.symbol, order.quantity, order.price
+                    )
+                else:
+                    total_qty = current.quantity + order.quantity
+                    average = (
+                        (current.quantity * current.average_price)
+                        + (order.quantity * order.price)
+                    ) / total_qty
+                    rebuilt[order.symbol] = PaperPosition(
+                        order.symbol, total_qty, average
+                    )
+
+            if rebuilt != self._positions:
+                errors.append("positions do not match the filled-order ledger")
+
+            return PaperReconciliation(
+                valid=not errors,
+                order_count=len(self.orders),
+                position_count=len(self._positions),
+                errors=tuple(errors),
+            )
 
     def _reload_from_database(self) -> None:
         assert self._connection is not None
