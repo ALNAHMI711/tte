@@ -45,7 +45,7 @@ class PaperReconciliation:
 class PaperBroker:
     """Persistent or in-memory paper ledger with deterministic fills."""
 
-    def __init__(self, persistence_path: str | None = None) -> None:
+    def __init__(\n        self,\n        persistence_path: str | None = None,\n        *,\n        repository: PaperLedgerRepository | None = None,\n    ) -> None:
         self.orders: list[PaperOrder] = []
         self._by_client_id: dict[str, PaperOrder] = {}
         self._positions: dict[str, PaperPosition] = {}
