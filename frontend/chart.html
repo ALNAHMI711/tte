@@ -7,7 +7,7 @@ const host=document.getElementById("chart"),status=document.getElementById("stat
 indicator.innerHTML='<option value="none">بدون مؤشر</option>'+INDICATOR_LIST.map(x=>'<option value="'+x.id+'">'+x.name+'</option>').join("");
 const chart=createChart(host,{layout:{background:{type:ColorType.Solid,color:"#0b1424"},textColor:"#cbd5e1"},grid:{vertLines:{color:"#172337"},horzLines:{color:"#172337"}},crosshair:{mode:CrosshairMode.Normal},timeScale:{timeVisible:true,secondsVisible:false}});
 const candles=chart.addSeries(CandlestickSeries,{upColor:"#55d88a",downColor:"#f07f7f",borderVisible:false,wickUpColor:"#55d88a",wickDownColor:"#f07f7f"});
-let rows=[],series=[];let redrawTimer=0;let lastRenderedTime=null;
+let rows=[],series=[];let redrawTimer=0;let lastRenderedTime=null;let loadGeneration=0;
 const drawings=new DrawingManager(chart,host);
 function clearIndicator(){for(const s of series)chart.removeSeries(s);series=[];const panes=chart.panes();for(let i=panes.length-1;i>0;i--)chart.removePane(i)}
 function line(data,pane=0,options={}){const s=chart.addSeries(LineSeries,{lineWidth:2,priceLineVisible:false,lastValueVisible:false,...options},pane);s.setData(data);series.push(s);return s}
@@ -15,7 +15,7 @@ function redraw(){
  clearIndicator();lastRenderedTime=rows.length?rows[rows.length-1].time:null;
  series=renderIndicator(chart,INDICATOR_REGISTRY,indicator.value,rows,line);
 }
-async function load(generation=null){try{const s=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;const r=await fetch("/market/candles?symbol="+encodeURIComponent(s)+"&timeframe="+encodeURIComponent(tf)+"&limit=300");if(r.status===401){location.href="/login.html";return false}if(!r.ok)throw Error();const d=await r.json();if(generation!==null&&generation!==streamGeneration)return false;rows=mergeCandles(rows,d.candles||[],300);candles.setData(rows);redraw();chart.timeScale().fitContent();status.textContent=d.symbol+" • "+d.timeframe+" • Testnet • قراءة فقط";return true}catch(_){if(generation===null||generation===streamGeneration)status.textContent="تعذر تحميل بيانات السوق";return false}}
+async function load(generation=null,fit=true){const request=++loadGeneration;try{const s=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;const r=await fetch("/market/candles?symbol="+encodeURIComponent(s)+"&timeframe="+encodeURIComponent(tf)+"&limit=300");if(r.status===401){location.href="/login.html";return false}if(!r.ok)throw Error();const d=await r.json();if(request!==loadGeneration||(generation!==null&&generation!==streamGeneration))return false;rows=mergeCandles(rows,d.candles||[],300);candles.setData(rows);redraw();if(fit)chart.timeScale().fitContent();status.textContent=d.symbol+" • "+d.timeframe+" • Testnet • قراءة فقط";return true}catch(_){if(generation===null||generation===streamGeneration)status.textContent="تعذر تحميل بيانات السوق";return false}}
 let marketSocket=null,streamGeneration=0,reconnectTimer=0,reconnectDelay=1000;
 function disconnectStream(){streamGeneration++;if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=0}if(marketSocket){marketSocket.onclose=null;marketSocket.close();marketSocket=null}}
 function connectStream(){
@@ -23,11 +23,11 @@ function connectStream(){
  const generation=streamGeneration,symbol=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;
  const proto=location.protocol==="https:"?"wss":"ws";
  marketSocket=new WebSocket(proto+"://"+location.host+"/market/stream?symbol="+encodeURIComponent(symbol)+"&timeframe="+encodeURIComponent(tf));
- marketSocket.onopen=async()=>{status.textContent=symbol+" • "+tf+" • مزامنة بيانات السوق…";const synced=await load(generation);if(generation!==streamGeneration||!marketSocket)return;if(!synced){status.textContent="فشلت مزامنة البث — إعادة المحاولة…";marketSocket.close();return}reconnectDelay=1000;status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط"};
+ marketSocket.onopen=async()=>{status.textContent=symbol+" • "+tf+" • مزامنة بيانات السوق…";const synced=await load(generation,false);if(generation!==streamGeneration||!marketSocket)return;if(!synced){status.textContent="فشلت مزامنة البث — إعادة المحاولة…";marketSocket.close();return}reconnectDelay=1000;status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط"};
  marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const i=rows.findIndex(x=>x.time===c.time);if(i>=0)rows[i]=c;else rows.push(c);candles.update(c);if(redrawTimer)return;redrawTimer=requestAnimationFrame(()=>{redrawTimer=0;if(rows.length){if(i>=0&&i===rows.length-1)updateIndicator(INDICATOR_REGISTRY,indicator.value,rows,series);else redraw()}})}catch(_){}};
- marketSocket.onclose=()=>{if(generation!==streamGeneration)return;if(document.visibilityState==="hidden")return;status.textContent="انقطع البث — إعادة المحاولة…";reconnectTimer=setTimeout(()=>{reconnectTimer=0;if(generation===streamGeneration)connectStream()},reconnectDelay);reconnectDelay=Math.min(reconnectDelay*2,30000)};
+ marketSocket.onclose=()=>{if(generation!==streamGeneration)return;marketSocket=null;if(document.visibilityState==="hidden")return;status.textContent="انقطع البث — إعادة المحاولة…";reconnectTimer=setTimeout(()=>{reconnectTimer=0;if(generation===streamGeneration)connectStream()},reconnectDelay);reconnectDelay=Math.min(reconnectDelay*2,30000)};
 }
-document.getElementById("load").onclick=async()=>{await load();connectStream()};
+document.getElementById("load").onclick=async()=>{await load(null,true);connectStream()};
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&!marketSocket)connectStream()});indicator.onchange=redraw;document.getElementById("drawing").onchange=e=>drawings.setMode(e.target.value);
 document.getElementById("clearDrawings").onclick=()=>drawings.clear();
 function storageKey(){return"tte.drawings."+document.getElementById("symbol").value.trim().toUpperCase()+"."+document.getElementById("timeframe").value}
