@@ -29,7 +29,16 @@ class RiskRejected(Exception):
     """Raised when the risk engine refuses an order."""
 
 
-def validate_order(notional: float, limits: RiskLimits, ctx: RiskContext, account_equity: float | None = None) -> None:
+def validate_order(
+    notional: float,
+    limits: RiskLimits,
+    ctx: RiskContext,
+    *,
+    account_equity: float | None = None,
+    entry_price: float | None = None,
+    stop_loss_price: float | None = None,
+    quantity: float | None = None,
+) -> None:
     if ctx.emergency_stop:
         raise RiskRejected("emergency stop is active")
     if notional <= 0:
@@ -46,8 +55,15 @@ def validate_order(notional: float, limits: RiskLimits, ctx: RiskContext, accoun
         raise RiskRejected("estimated slippage is too high")
     if ctx.correlation_exposure + notional / limits.max_open_exposure > limits.max_correlation_exposure:
         raise RiskRejected("correlation exposure limit reached")
+
     if account_equity is not None:
         if account_equity <= 0:
             raise RiskRejected("account equity must be positive")
-        if notional > account_equity * (limits.risk_per_trade_pct / 100) * 20:
+        if entry_price is None or stop_loss_price is None or quantity is None:
+            raise RiskRejected("entry, stop loss and quantity are required for risk-per-trade validation")
+        if entry_price <= 0 or stop_loss_price <= 0 or quantity <= 0:
+            raise RiskRejected("entry, stop loss and quantity must be positive")
+        risk_amount = abs(entry_price - stop_loss_price) * quantity
+        risk_budget = account_equity * (limits.risk_per_trade_pct / 100)
+        if risk_amount > risk_budget:
             raise RiskRejected("order exceeds risk-per-trade budget")
