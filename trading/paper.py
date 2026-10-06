@@ -276,10 +276,15 @@ class PaperBroker:
             )
 
     def _reload_from_database(self) -> None:
+        """Rebuild state off to the side, then publish it atomically.
+
+        A corrupt persistent row must never leave a live broker half-restored.
+        """
         assert self._connection is not None
-        self.orders.clear()
-        self._by_client_id.clear()
-        self._positions.clear()
+
+        restored_orders: list[PaperOrder] = []
+        restored_by_client_id: dict[str, PaperOrder] = {}
+        restored_positions: dict[str, PaperPosition] = {}
 
         rows = self._connection.execute(
             "SELECT id, symbol, side, quantity, price, client_order_id, status "
@@ -307,12 +312,61 @@ class PaperBroker:
             ):
                 raise ValueError("paper ledger contains invalid order data")
             if order.client_order_id:
-                if order.client_order_id in self._by_client_id:
+                if order.client_order_id in restored_by_client_id:
                     raise ValueError("paper ledger contains duplicate client order ids")
-                self._by_client_id[order.client_order_id] = order
-            self._validate_fill(order.symbol, order.side, order.quantity)
-            self.orders.append(order)
-            self._apply_fill(order)
+                restored_by_client_id[order.client_order_id] = order
+            self._validate_fill_against(
+                restored_positions, order.symbol, order.side, order.quantity
+            )
+            restored_orders.append(order)
+            self._apply_fill_to(restored_positions, order)
+
+        self.orders[:] = restored_orders
+        self._by_client_id.clear()
+        self._by_client_id.update(restored_by_client_id)
+        self._positions.clear()
+        self._positions.update(restored_positions)
+
+    @staticmethod
+    def _validate_fill_against(
+        positions: dict[str, PaperPosition],
+        symbol: str,
+        side: str,
+        quantity: float,
+    ) -> None:
+        if side == "sell":
+            current = positions.get(symbol)
+            if current is None or quantity > current.quantity:
+                raise ValueError("paper ledger contains invalid sell")
+
+    @staticmethod
+    def _apply_fill_to(
+        positions: dict[str, PaperPosition], order: PaperOrder
+    ) -> None:
+        current = positions.get(order.symbol)
+        if order.side == "buy":
+            if current is None:
+                positions[order.symbol] = PaperPosition(
+                    order.symbol, order.quantity, order.price
+                )
+                return
+            total_qty = current.quantity + order.quantity
+            average = (
+                (current.quantity * current.average_price)
+                + (order.quantity * order.price)
+            ) / total_qty
+            positions[order.symbol] = PaperPosition(
+                order.symbol, total_qty, average
+            )
+            return
+
+        remaining = current.quantity - order.quantity if current else 0.0
+        if remaining <= 0:
+            positions.pop(order.symbol, None)
+        else:
+            positions[order.symbol] = PaperPosition(
+                order.symbol, remaining, current.average_price
+            )
 
     def _apply_fill(self, order: PaperOrder) -> None:
         current = self._positions.get(order.symbol)
