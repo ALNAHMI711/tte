@@ -13,3 +13,8 @@ export function mergeCandles(existing, incoming, limit = 300) {
   }
   return [...byTime.entries()].sort((a,b)=>a[0]-b[0]).slice(-limit).map(([,candle])=>candle);
 }
+
+export function mergeCandle(existing, incoming, limit = 300) {
+  const rows = mergeCandles(existing, [incoming], limit);
+  return { rows, isLatest: rows.length > 0 && Number(rows[rows.length - 1].time) === Number(incoming.time) };
+}
