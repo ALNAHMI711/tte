@@ -42,8 +42,6 @@ class ExecutionEngine:
         stop_loss_price: float | None = None,
         market_prices: dict[str, float] | None = None,
     ) -> PaperOrder:
-        from .adapters import TradingEnvironment, enforce_safe_account
-
         """Route adapter market data through filters/risk into Paper only.
 
         This method deliberately never calls adapter.submit_order. A
@@ -51,6 +49,8 @@ class ExecutionEngine:
         market marks; the paper ledger remains the only execution sink.
         LIVE adapters are rejected before any order/risk routing occurs.
         """
+        from .adapters import TradingEnvironment, enforce_safe_account
+
         environment = getattr(adapter, "environment", None)
         if environment is TradingEnvironment.LIVE:
             raise RuntimeError("LIVE adapter routing is disabled in this foundation")
@@ -82,6 +82,7 @@ class ExecutionEngine:
             stop_loss_price=stop_loss_price,
             market_prices=prices or None,
         )
+
     def submit(
         self,
         request: OrderRequest,
