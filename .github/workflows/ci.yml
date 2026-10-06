@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, foundation-v1]
   pull_request:
-    branches: [main]
+    branches: [main, foundation-v1]
 
 jobs:
   test:
@@ -20,3 +20,8 @@ jobs:
         run: python -m compileall trading tests
       - name: Test
         run: python -m pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Frontend indicator tests
+        run: node --test tests/test_indicators.mjs

@@ -10,6 +10,7 @@
     *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1424,#07101d);min-height:100vh}
     .wrap{max-width:900px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
     h1{font-size:22px;margin:0}.sub{color:#91a0b5;font-size:12px;margin-top:4px}.badge{padding:7px 10px;border:1px solid #26364e;border-radius:999px;font-size:12px}
+    .nav{display:flex;gap:8px;overflow:auto;margin:0 0 14px;padding-bottom:2px}.nav a{flex:0 0 auto;text-decoration:none;color:#b9c7d9;background:#0d1829;border:1px solid #1d2b40;border-radius:10px;padding:9px 12px;font-size:12px}.nav a:hover{border-color:#315074;color:#fff}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{background:#0d1829;border:1px solid #1d2b40;border-radius:16px;padding:14px;box-shadow:0 8px 28px #0004}
     .name{font-weight:700}.status{font-size:12px;margin-top:6px;color:#8fa1b8}.ok{color:#55d88a}.wait{color:#e7c76a}.off{color:#f07f7f}.value{font-size:20px;font-weight:800;margin-top:10px}.meta{display:flex;justify-content:space-between;color:#91a0b5;font-size:11px;margin-top:8px}
     .wide{grid-column:1/-1}.notice{padding:12px;border-radius:12px;background:#111f33;border:1px solid #243753;color:#b9c7d9;font-size:12px;line-height:1.7}
@@ -19,7 +20,16 @@
 </head>
 <body>
   <main class="wrap">
-    <header class="top"><div><h1>منصة TTE للتداول</h1><div class="sub">لوحة تحكم سحابية — التداول الحقيقي مقفل افتراضياً</div></div><span id="mode" class="badge">جارٍ الفحص…</span></header>
+    <header class="top">
+  <div><h1>منصة TTE للتداول</h1><div class="sub">لوحة تحكم سحابية — التداول الحقيقي مقفل افتراضياً</div></div>
+  <span id="mode" class="badge">جارٍ الفحص…</span>
+</header>
+<nav class="nav" aria-label="التنقل الرئيسي">
+  <a href="/dashboard.html">الرئيسية</a>
+  <a href="/chart.html">الرسم البياني</a>
+  <a href="/control/session">الجلسة</a>
+  <a href="/control/binance-readiness">جاهزية Binance</a>
+</nav>
     <section id="cards" class="grid"></section>
     <section class="card wide">
       <div class="name">جاهزية Binance</div>

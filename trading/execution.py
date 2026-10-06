@@ -16,6 +16,7 @@ class OrderRequest:
     side: str
     quantity: float
     price: float
+    client_order_id: str | None = None
 
 
 class ExecutionEngine:
@@ -26,7 +27,7 @@ class ExecutionEngine:
         live_preflight: BinancePreflightReport | None = None,
     ) -> None:
         self.limits = limits or RiskLimits()
-        self.paper = PaperBroker()
+        self.paper = PaperBroker(settings.paper_store_path or None)
         self.kill_switch = kill_switch or KillSwitch()
         self.live_preflight = live_preflight
 
@@ -35,6 +36,10 @@ class ExecutionEngine:
         request: OrderRequest,
         context: RiskContext,
         symbol_info: object | None = None,
+        *,
+        account_equity: float | None = None,
+        stop_loss_price: float | None = None,
+        market_prices: dict[str, float] | None = None,
     ) -> PaperOrder:
         """Validate hard safety gates before any order is created.
 
@@ -68,15 +73,59 @@ class ExecutionEngine:
             final_quantity = float(normalized.quantity)
             final_price = float(normalized.price)
 
+        normalized_side = request.side.strip().lower()
+        if normalized_side not in {"buy", "sell"}:
+            raise RiskRejected("side must be buy or sell")
+
+        if request.client_order_id:
+            existing = self.paper.order_by_client_id(request.client_order_id)
+            if existing is not None:
+                if (
+                    existing.symbol != request.symbol.strip().upper()
+                    or existing.side != normalized_side
+                    or existing.quantity != final_quantity
+                    or existing.price != final_price
+                ):
+                    raise RiskRejected("client_order_id is already bound to a different order")
+                return existing
+
+        if self.paper.positions() and market_prices is None:
+            raise RiskRejected("market prices are required when open positions exist")
+
         notional = final_quantity * final_price
-        validate_order(notional, self.limits, context)
+        risk_context = context
+        if market_prices is not None:
+            from .portfolio_risk import portfolio_exposure
+
+            exposure = portfolio_exposure(self.paper, market_prices)
+            risk_context = RiskContext(
+                daily_loss=context.daily_loss,
+                weekly_loss=context.weekly_loss,
+                open_exposure=exposure.gross_notional,
+                estimated_slippage_bps=context.estimated_slippage_bps,
+                correlation_exposure=context.correlation_exposure,
+                emergency_stop=context.emergency_stop,
+            )
+        exposure_delta = notional if normalized_side == "buy" else -notional
+        validate_order(
+            notional,
+            self.limits,
+            risk_context,
+            account_equity=account_equity,
+            entry_price=final_price,
+            stop_loss_price=stop_loss_price,
+            quantity=final_quantity,
+            side=normalized_side,
+            exposure_delta=exposure_delta,
+        )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
         if not settings.paper_trading:
             raise RuntimeError("paper trading must be enabled")
         return self.paper.submit(
             request.symbol,
-            request.side,
+            normalized_side,
             final_quantity,
             final_price,
+            request.client_order_id,
         )

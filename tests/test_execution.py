@@ -31,7 +31,7 @@ def test_execution_routes_exchange_normalized_values() -> None:
     engine = ExecutionEngine()
     captured: dict[str, float] = {}
 
-    def capture(symbol: str, side: str, quantity: float, price: float):
+    def capture(symbol: str, side: str, quantity: float, price: float, client_order_id=None):
         captured.update(symbol=symbol, side=side, quantity=quantity, price=price)
         return type("Order", (), {"status": "FILLED", "id": "paper-captured"})()
 
@@ -109,4 +109,87 @@ def test_execution_preserves_context_emergency_stop_gate() -> None:
         engine.submit(
             OrderRequest("BTC/USDT", "buy", 0.01, 1000),
             RiskContext(emergency_stop=True),
+        )
+
+
+def test_execution_enforces_half_percent_risk_budget_when_stop_is_supplied():
+    engine = ExecutionEngine()
+    with pytest.raises(RiskRejected, match="risk-per-trade"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(),
+            account_equity=1000,
+            stop_loss_price=400,
+        )
+
+
+def test_execution_accepts_order_within_half_percent_risk_budget():
+    engine = ExecutionEngine()
+    order = engine.submit(
+        OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+        RiskContext(),
+        account_equity=1000,
+        stop_loss_price=950,
+    )
+    assert order.status == "FILLED"
+
+
+def test_execution_preserves_client_order_id_for_idempotent_paper_submission():
+    engine = ExecutionEngine()
+    request = OrderRequest("BTC/USDT", "buy", 0.01, 1000, client_order_id="client-001")
+
+    first = engine.submit(request, RiskContext())
+    second = engine.submit(request, RiskContext())
+
+    assert second is first
+    assert len(engine.paper.orders) == 1
+    assert engine.paper.position("BTC/USDT").quantity == 0.01
+
+
+def test_execution_uses_authoritative_portfolio_exposure_for_new_position():
+    engine = ExecutionEngine(limits=__import__("trading.risk", fromlist=["RiskLimits"]).RiskLimits(max_open_exposure=100))
+    engine.paper.submit("BTCUSDT", "buy", 0.08, 1000)
+
+    with pytest.raises(RiskRejected, match="open exposure"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "buy", 0.03, 1000),
+            RiskContext(),
+            market_prices={"BTCUSDT": 1000},
+        )
+
+
+def test_execution_allows_sell_when_it_reduces_portfolio_exposure():
+    engine = ExecutionEngine(limits=__import__("trading.risk", fromlist=["RiskLimits"]).RiskLimits(max_open_exposure=100))
+    engine.paper.submit("BTCUSDT", "buy", 0.10, 1000)
+
+    order = engine.submit(
+        OrderRequest("BTCUSDT", "sell", 0.05, 1000),
+        RiskContext(),
+        market_prices={"BTCUSDT": 1000},
+    )
+
+    assert order.status == "FILLED"
+    assert engine.paper.position("BTCUSDT").quantity == 0.05
+
+
+def test_execution_requires_market_prices_when_positions_exist():
+    engine = ExecutionEngine()
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+
+    with pytest.raises(RiskRejected, match="market prices"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "buy", 0.01, 1000),
+            RiskContext(),
+        )
+
+
+def test_execution_rejects_invalid_side_before_exposure_calculation():
+    engine = ExecutionEngine()
+    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+
+    with pytest.raises(RiskRejected, match="side must be buy or sell"):
+        engine.submit(
+            OrderRequest("ETHUSDT", "hold", 0.01, 1000),
+            RiskContext(),
+            market_prices={"BTCUSDT": 1000},
         )

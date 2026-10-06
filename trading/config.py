@@ -34,6 +34,7 @@ class Settings:
     session_store_path: str = os.getenv("SESSION_STORE_PATH", "")
     session_ttl_seconds: int = _int("SESSION_TTL_SECONDS", 3600)
     session_step_up_seconds: int = _int("SESSION_STEP_UP_SECONDS", 300)
+    paper_store_path: str = os.getenv("PAPER_STORE_PATH", "").strip()
 
     def validate(self) -> None:
         if self.live_trading and not self.session_secret:
@@ -44,6 +45,10 @@ class Settings:
             raise ValueError("SESSION_STORE_BACKEND must be memory or sqlite")
         if self.session_ttl_seconds <= 0 or self.session_step_up_seconds <= 0:
             raise ValueError("session TTL settings must be positive")
+        if self.paper_trading and self.app_env.strip().lower() in {"production", "prod"} and not self.paper_store_path:
+            raise ValueError("production paper trading requires PAPER_STORE_PATH")
+        if self.paper_store_path and not Path(self.paper_store_path).is_absolute() and self.app_env.strip().lower() in {"production", "prod"}:
+            raise ValueError("production PAPER_STORE_PATH must be an absolute path")
         if self.session_store_backend == "sqlite" and not self.session_store_path:
             raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
         if self.app_env.strip().lower() in {"production", "prod"}:

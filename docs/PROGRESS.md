@@ -6,7 +6,7 @@
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
 - أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
-- آخر دفعة: إضافة liveness/readiness آمنة مع اختبارات عدم تسريب تفاصيل الأخطاء
+- آخر دفعة: جعل Paper Trading قابلاً للاستعادة عبر SQLite مع idempotency واختبار فساد السجل؛ Live ما زال مقفولاً.
 
 ## لوحة المتابعة
 | المجال | الحالة |
@@ -19,7 +19,7 @@
 | الاستراتيجيات | 0% |
 | إدارة المخاطر | 25% |
 | التنفيذ | 20% |
-| Paper Trading | 25% |
+| Paper Trading | 40% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
 | الاختبارات | 44% |
@@ -45,7 +45,7 @@
 لا يتم فتح Live Trading حتى تنجح اختبارات الأمان، المصادقة، الأسرار، البيانات، المخاطر، التنفيذ، Paper Trading، وفحوصات CI بدون أخطاء حرجة، ثم اجتياز فحوص Binance Trusted IP والصلاحيات.
 
 ## الخطوات التالية ذات الأولوية
-1. Audit persistence مع منع تعديل/حذف السجلات الحساسة.
+1. تحسين Paper ledger إلى طبقة repository/transaction آمنة، ثم الانتقال لاحقاً إلى PostgreSQL.
 2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
 3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
 4. بناء عقود Exchange Adapter وMarket Data ثم Binance Testnet.

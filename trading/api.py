@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import re
 from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi import WebSocket, WebSocketDisconnect
+from websockets.asyncio.client import connect as websocket_connect
 
 from .audit import AuditEvent, AuditLog, AuditPersistence
 from .auth import AuthenticationService
+from .binance_market import BinanceMarketClient, BinanceMarketError
 from .binance_readiness import BinanceReadinessStatus
 from .health import HealthChecker
 from .http_security import CookiePolicy, CsrfToken, constant_time_token_match
@@ -18,6 +23,7 @@ from .server_ip import PublicIPClient, PublicIPError
 
 SESSION_COOKIE = CookiePolicy()
 CSRF_COOKIE = "tte_csrf"
+MARKET_SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,30}$")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
@@ -78,6 +84,7 @@ def create_app(
     audit_store: AuditPersistence | None = None,
     public_ip_client: PublicIPClient | None = None,
     binance_readiness: BinanceReadinessStatus | None = None,
+    market_client: BinanceMarketClient | None = None,
 ) -> FastAPI:
     app = FastAPI(title="TTE Trading Control Plane", docs_url=None, redoc_url=None)
     checker = health or HealthChecker()
@@ -88,6 +95,7 @@ def create_app(
     app.state.audit_store = audit_store
     app.state.public_ip_client = ip_client
     app.state.binance_readiness = binance_readiness
+    app.state.market_client = market_client or BinanceMarketClient()
 
     @app.get("/health")
     def health_endpoint() -> dict[str, object]:
@@ -108,6 +116,15 @@ def create_app(
     @app.get("/login.html", response_model=None)
     def login_page() -> FileResponse | JSONResponse:
         page = _frontend_file("login.html")
+        if page is None:
+            return _json_error(404, "frontend_not_found")
+        return FileResponse(page, media_type="text/html; charset=utf-8")
+
+    @app.get("/chart.html", response_model=None)
+    def chart_page(request: Request) -> FileResponse | JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        page = _frontend_file("chart.html")
         if page is None:
             return _json_error(404, "frontend_not_found")
         return FileResponse(page, media_type="text/html; charset=utf-8")
@@ -195,6 +212,74 @@ def create_app(
         if binance_readiness is None:
             return _json_error(503, "binance_readiness_unavailable")
         return JSONResponse(binance_readiness.to_dict())
+
+    @app.get("/market/candles")
+    def market_candles(request: Request, symbol: str = "BTCUSDT", timeframe: str = "1m", limit: int = 200) -> JSONResponse:
+        if _authenticated_session(request, auth) is None:
+            return _json_error(401, "authentication_required")
+        symbol, timeframe = symbol.strip().upper(), timeframe.strip()
+        if not MARKET_SYMBOL_RE.fullmatch(symbol) or not timeframe or len(timeframe) > 10 or not 1 <= limit <= 1000:
+            return _json_error(400, "invalid_market_request")
+        try:
+            candles = app.state.market_client.candles(symbol, timeframe, limit)
+        except ValueError:
+            return _json_error(400, "invalid_market_request")
+        except BinanceMarketError:
+            return _json_error(503, "market_data_unavailable")
+        return JSONResponse({"symbol": symbol, "timeframe": timeframe, "environment": "TESTNET",
+            "candles": [{"time": int(c.timestamp.timestamp()), "open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume} for c in candles]})
+
+    @app.websocket("/market/stream")
+    async def market_stream(websocket: WebSocket) -> None:
+        if _authenticated_session(websocket, auth) is None:
+            await websocket.close(code=1008, reason="authentication_required")
+            return
+        symbol = websocket.query_params.get("symbol", "BTCUSDT").strip().upper()
+        timeframe = websocket.query_params.get("timeframe", "1m").strip()
+        allowed = {"1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h","1d"}
+        if not MARKET_SYMBOL_RE.fullmatch(symbol) or timeframe not in allowed:
+            await websocket.close(code=1008, reason="invalid_market_request")
+            return
+        await websocket.accept()
+        url = f"wss://stream.testnet.binance.vision/ws/{symbol.lower()}@kline_{timeframe}"
+        try:
+            async with websocket_connect(url, open_timeout=5, close_timeout=2, ping_interval=20) as upstream:
+                while True:
+                    message = await upstream.recv()
+                    if isinstance(message, bytes):
+                        message = message.decode("utf-8")
+                    try:
+                        payload = json.loads(message)
+                        k = payload.get("k", {})
+                        if not isinstance(k, dict):
+                            continue
+                        normalized = {
+                            "stream": "kline",
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "environment": "TESTNET",
+                            "closed": bool(k.get("x", False)),
+                            "candle": {
+                                "time": int(k["t"]) // 1000,
+                                "open": float(k["o"]),
+                                "high": float(k["h"]),
+                                "low": float(k["l"]),
+                                "close": float(k["c"]),
+                                "volume": float(k["v"]),
+                            },
+                        }
+                        await websocket.send_json(normalized)
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        continue
+        except WebSocketDisconnect:
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            try:
+                await websocket.close(code=1011, reason="market_stream_unavailable")
+            except Exception:
+                pass
 
     @app.get("/control/kill-switch")
     def kill_switch_status(request: Request) -> JSONResponse:
