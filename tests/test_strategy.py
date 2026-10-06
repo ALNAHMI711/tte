@@ -12,7 +12,7 @@ def test_strategy_holds_during_warmup():
 
 def test_strategy_enters_long_only_on_bullish_cross():
     strategy = EmaCrossStrategy(2, 3)
-    result = strategy.evaluate(StrategyContext("BTCUSDT", candles([10, 9, 8, 12, 14]), False))
+    result = strategy.evaluate(StrategyContext("BTCUSDT", candles([10, 9, 8, 7, 20]), False))
     assert result is StrategyAction.ENTER_LONG
 
 
