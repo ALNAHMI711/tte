@@ -10,6 +10,11 @@ from trading.order_filters import OrderFilterError
 from trading.risk import RiskContext, RiskRejected
 
 
+SIGNAL_SCORE = 90.0
+REWARD_RISK = 2.5
+STOP_LOSS = 950.0
+
+
 SYMBOL = SymbolInfo(
     symbol="BTCUSDT",
     base_asset="BTC",
@@ -23,7 +28,7 @@ SYMBOL = SymbolInfo(
 
 def test_execution_uses_paper_broker() -> None:
     engine = ExecutionEngine()
-    order = engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+    order = engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=SIGNAL_SCORE, reward_risk_ratio=REWARD_RISK, stop_loss_price=STOP_LOSS)
     assert order.status == "FILLED"
     assert order.id.startswith("paper-")
 
@@ -68,6 +73,9 @@ def test_execution_rejects_minimum_notional_before_paper_submission() -> None:
             OrderRequest("BTC/USDT", "buy", 0.0019, 100),
             RiskContext(),
             SYMBOL,
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
         )
 
     assert called is False
@@ -87,7 +95,7 @@ def test_execution_kill_switch_blocks_new_orders_before_paper_submission() -> No
     engine.paper.submit = fail_if_called  # type: ignore[method-assign]
 
     with pytest.raises(RiskRejected, match="operator requested stop"):
-        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=SIGNAL_SCORE, reward_risk_ratio=REWARD_RISK, stop_loss_price=STOP_LOSS)
 
     assert called is False
 
@@ -98,7 +106,7 @@ def test_execution_resumes_new_orders_after_kill_switch_deactivation() -> None:
     engine = ExecutionEngine(kill_switch=kill_switch)
     kill_switch.deactivate()
 
-    order = engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+    order = engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=SIGNAL_SCORE, reward_risk_ratio=REWARD_RISK, stop_loss_price=STOP_LOSS)
 
     assert order.status == "FILLED"
 
@@ -121,6 +129,8 @@ def test_execution_enforces_half_percent_risk_budget_when_stop_is_supplied():
             RiskContext(),
             account_equity=1000,
             stop_loss_price=400,
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
         )
 
 
@@ -130,7 +140,9 @@ def test_execution_accepts_order_within_half_percent_risk_budget():
         OrderRequest("BTC/USDT", "buy", 0.01, 1000),
         RiskContext(),
         account_equity=1000,
-        stop_loss_price=950,
+        stop_loss_price=STOP_LOSS,
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
     )
     assert order.status == "FILLED"
 
@@ -139,8 +151,8 @@ def test_execution_preserves_client_order_id_for_idempotent_paper_submission():
     engine = ExecutionEngine()
     request = OrderRequest("BTC/USDT", "buy", 0.01, 1000, client_order_id="client-001")
 
-    first = engine.submit(request, RiskContext())
-    second = engine.submit(request, RiskContext())
+    first = engine.submit(request, RiskContext(), signal_score=SIGNAL_SCORE, reward_risk_ratio=REWARD_RISK, stop_loss_price=STOP_LOSS)
+    second = engine.submit(request, RiskContext(), signal_score=SIGNAL_SCORE, reward_risk_ratio=REWARD_RISK, stop_loss_price=STOP_LOSS)
 
     assert second is first
     assert len(engine.paper.orders) == 1
@@ -281,3 +293,38 @@ def test_execution_adapter_path_rejects_live_before_adapter_submission():
             adapter,
         )
     assert adapter.calls == []
+
+def test_execution_strict_risk_requires_signal_score_before_paper_submission():
+    engine = ExecutionEngine()
+    with pytest.raises(RiskRejected, match="signal score"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(),
+            stop_loss_price=STOP_LOSS,
+            reward_risk_ratio=REWARD_RISK,
+        )
+    assert engine.paper.orders == ()
+
+
+def test_execution_strict_risk_requires_reward_risk_before_paper_submission():
+    engine = ExecutionEngine()
+    with pytest.raises(RiskRejected, match="reward-risk"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(),
+            stop_loss_price=STOP_LOSS,
+            signal_score=SIGNAL_SCORE,
+        )
+    assert engine.paper.orders == ()
+
+
+def test_execution_strict_risk_requires_stop_loss_before_paper_submission():
+    engine = ExecutionEngine()
+    with pytest.raises(RiskRejected, match="protective"):
+        engine.submit(
+            OrderRequest("BTC/USDT", "buy", 0.01, 1000),
+            RiskContext(),
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+        )
+    assert engine.paper.orders == ()
