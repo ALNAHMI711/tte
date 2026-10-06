@@ -46,6 +46,9 @@ def test_execution_routes_exchange_normalized_values() -> None:
         OrderRequest("BTC/USDT", "buy", 0.0019, 10000.1234),
         RiskContext(),
         SYMBOL,
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
+        stop_loss_price=STOP_LOSS,
     )
 
     assert order.status == "FILLED"
@@ -118,6 +121,9 @@ def test_execution_preserves_context_emergency_stop_gate() -> None:
         engine.submit(
             OrderRequest("BTC/USDT", "buy", 0.01, 1000),
             RiskContext(emergency_stop=True),
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
         )
 
 
@@ -168,6 +174,9 @@ def test_execution_uses_authoritative_portfolio_exposure_for_new_position():
             OrderRequest("ETHUSDT", "buy", 0.03, 1000),
             RiskContext(),
             market_prices={"BTCUSDT": 1000},
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
         )
 
 
@@ -205,6 +214,9 @@ def test_execution_rejects_invalid_side_before_exposure_calculation():
             OrderRequest("ETHUSDT", "hold", 0.01, 1000),
             RiskContext(),
             market_prices={"BTCUSDT": 1000},
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
         )
 
 
@@ -242,6 +254,9 @@ def test_execution_adapter_path_is_read_only_and_routes_to_paper():
         OrderRequest("BTCUSDT", "buy", 0.01, 1000),
         RiskContext(),
         adapter,
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
+        stop_loss_price=STOP_LOSS,
     )
 
     assert order.status == "FILLED"
@@ -258,6 +273,9 @@ def test_execution_adapter_path_fetches_marks_for_existing_positions():
         OrderRequest("BTCUSDT", "sell", 0.005, 1000),
         RiskContext(),
         adapter,
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
+        stop_loss_price=STOP_LOSS,
     )
 
     assert order.status == "FILLED"
