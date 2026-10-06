@@ -20,7 +20,7 @@ def test_builder_returns_none_for_hold():
 
 def test_builder_translates_long_signal_without_execution():
     strategy = EmaCrossStrategy(2, 3)
-    context = StrategyContext("BTCUSDT", candles([10, 9, 8, 12, 14]), False)
+    context = StrategyContext("BTCUSDT", candles([10, 9, 8, 7, 20]), False)
     request = build_order_request(
         strategy, context, quantity=0.01, price=1000, client_order_id="ema-001"
     )
@@ -41,6 +41,7 @@ def test_builder_translates_exit_signal():
 def test_builder_rejects_invalid_quantity():
     class AlwaysLong:
         name = "test"
+
         def evaluate(self, context):
             return StrategyAction.ENTER_LONG
 
