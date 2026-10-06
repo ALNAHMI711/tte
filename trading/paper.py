@@ -64,6 +64,12 @@ class PaperBroker:
         if self._repository is not None:
             self._restore()
 
+    def healthcheck(self) -> None:
+        """Verify the configured persistent paper store when one is in use."""
+        with self._lock:
+            if self._repository is not None:
+                self._repository.healthcheck()
+
     @property
     def _connection(self) -> sqlite3.Connection | None:
         """Compatibility hook for tests and controlled SQLite inspection."""
