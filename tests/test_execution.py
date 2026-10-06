@@ -4,6 +4,7 @@ import pytest
 
 from trading.adapters import SymbolInfo
 from trading.execution import ExecutionEngine, OrderRequest
+from trading.adapters import TradingEnvironment
 from trading.kill_switch import KillSwitch
 from trading.order_filters import OrderFilterError
 from trading.risk import RiskContext, RiskRejected
