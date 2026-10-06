@@ -39,6 +39,7 @@ class ExecutionEngine:
         *,
         account_equity: float | None = None,
         stop_loss_price: float | None = None,
+        market_prices: dict[str, float] | None = None,
     ) -> PaperOrder:
         """Validate hard safety gates before any order is created.
 
@@ -73,15 +74,31 @@ class ExecutionEngine:
             final_price = float(normalized.price)
 
         notional = final_quantity * final_price
+        risk_context = context
+        if market_prices is not None:
+            from .portfolio_risk import portfolio_exposure
+
+            exposure = portfolio_exposure(self.paper, market_prices)
+            risk_context = RiskContext(
+                daily_loss=context.daily_loss,
+                weekly_loss=context.weekly_loss,
+                open_exposure=exposure.gross_notional,
+                estimated_slippage_bps=context.estimated_slippage_bps,
+                correlation_exposure=context.correlation_exposure,
+                emergency_stop=context.emergency_stop,
+            )
+        normalized_side = request.side.strip().lower()
+        exposure_delta = notional if normalized_side == "buy" else -notional
         validate_order(
             notional,
             self.limits,
-            context,
+            risk_context,
             account_equity=account_equity,
             entry_price=final_price,
             stop_loss_price=stop_loss_price,
             quantity=final_quantity,
             side=request.side,
+            exposure_delta=exposure_delta,
         )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
