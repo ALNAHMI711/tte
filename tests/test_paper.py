@@ -214,7 +214,7 @@ def test_paper_sqlite_restore_rejects_non_finite_numeric_data(tmp_path):
     )
     broker._connection.commit()
 
-    with pytest.raises(ValueError, match="invalid order data"):
+    with pytest.raises(ValueError, match="invalid numeric data"):
         PaperBroker(str(path))
 
 
