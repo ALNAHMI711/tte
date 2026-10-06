@@ -47,6 +47,11 @@ class Settings:
             raise ValueError("SESSION_STORE_BACKEND must be memory or sqlite")
         if self.session_ttl_seconds <= 0 or self.session_step_up_seconds <= 0:
             raise ValueError("session TTL settings must be positive")
+        if self.session_store_backend == "sqlite":
+            if not self.session_store_path:
+                raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
+            if not self.session_secret:
+                raise ValueError("SESSION_SECRET is required when SESSION_STORE_BACKEND=sqlite")
         if self.paper_store_backend not in {"sqlite", "postgresql"}:
             raise ValueError("PAPER_STORE_BACKEND must be sqlite or postgresql")
         if self.paper_store_backend == "postgresql" and not self.paper_store_dsn:
