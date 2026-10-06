@@ -13,7 +13,10 @@ class RiskLimits:
     max_open_exposure: float = 250.0
     max_slippage_bps: float = 50.0
     risk_per_trade_pct: float = 0.5
-    max_correlation_exposure: float = 1.0
+    max_correlation_exposure: float = 250.0
+    max_open_positions: int = 5
+    min_signal_score: float = 85.0
+    min_reward_risk: float = 2.0
 
     def __post_init__(self) -> None:
         fields = (
@@ -23,12 +26,16 @@ class RiskLimits:
             ("max_open_exposure", self.max_open_exposure),
             ("max_slippage_bps", self.max_slippage_bps),
             ("max_correlation_exposure", self.max_correlation_exposure),
+            ("min_signal_score", self.min_signal_score),
+            ("min_reward_risk", self.min_reward_risk),
         )
         for name, value in fields:
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be a finite positive number")
         if not math.isfinite(self.risk_per_trade_pct) or not 0 < self.risk_per_trade_pct <= 100:
             raise ValueError("risk_per_trade_pct must be finite, greater than 0 and at most 100")
+        if not isinstance(self.max_open_positions, int) or isinstance(self.max_open_positions, bool) or self.max_open_positions <= 0:
+            raise ValueError("max_open_positions must be a positive integer")
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,7 @@ class RiskContext:
     open_exposure: float = 0.0
     estimated_slippage_bps: float = 0.0
     correlation_exposure: float = 0.0
+    open_positions: int = 0
     emergency_stop: bool = False
 
     def __post_init__(self) -> None:
@@ -50,6 +58,8 @@ class RiskContext:
         ):
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be a finite non-negative number")
+        if not isinstance(self.open_positions, int) or isinstance(self.open_positions, bool) or self.open_positions < 0:
+            raise ValueError("open_positions must be a non-negative integer")
 
 
 class RiskRejected(Exception):
@@ -67,26 +77,39 @@ def validate_order(
     quantity: float | None = None,
     side: str | None = None,
     exposure_delta: float | None = None,
+    signal_score: float | None = 85.0,
+    reward_risk_ratio: float | None = 2.0,
 ) -> None:
     if ctx.emergency_stop:
         raise RiskRejected("emergency stop is active")
     if not math.isfinite(notional) or notional <= 0:
         raise RiskRejected("order notional must be positive")
+    if not math.isfinite(signal_score) if signal_score is not None else False:
+        raise RiskRejected("signal score must be finite")
+    if signal_score is None or signal_score < limits.min_signal_score:
+        raise RiskRejected("signal score is below minimum")
+    if not math.isfinite(reward_risk_ratio) if reward_risk_ratio is not None else False:
+        raise RiskRejected("reward-risk ratio must be finite")
+    if reward_risk_ratio is None or reward_risk_ratio < limits.min_reward_risk:
+        raise RiskRejected("reward-risk ratio is below minimum")
     if notional > limits.max_order_notional:
         raise RiskRejected("order exceeds max order notional")
     if ctx.daily_loss >= limits.max_daily_loss:
         raise RiskRejected("daily loss limit reached")
     if ctx.weekly_loss >= limits.max_weekly_loss:
         raise RiskRejected("weekly loss limit reached")
+    if ctx.open_positions >= limits.max_open_positions:
+        raise RiskRejected("maximum open positions reached")
     projected_exposure = ctx.open_exposure + (notional if exposure_delta is None else exposure_delta)
     if projected_exposure < 0:
         raise RiskRejected("projected open exposure cannot be negative")
     if projected_exposure > limits.max_open_exposure:
         raise RiskRejected("open exposure limit reached")
+    projected_correlation = ctx.correlation_exposure + (notional if exposure_delta is None else max(exposure_delta, 0.0))
+    if projected_correlation > limits.max_correlation_exposure:
+        raise RiskRejected("correlation exposure limit reached")
     if ctx.estimated_slippage_bps > limits.max_slippage_bps:
         raise RiskRejected("estimated slippage is too high")
-    if ctx.correlation_exposure + notional / limits.max_open_exposure > limits.max_correlation_exposure:
-        raise RiskRejected("correlation exposure limit reached")
 
     if side is not None and entry_price is not None and stop_loss_price is not None:
         normalized_side = side.strip().lower()
