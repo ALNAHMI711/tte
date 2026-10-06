@@ -183,6 +183,41 @@ def test_paper_sqlite_second_broker_refreshes_committed_orders(tmp_path):
     assert second.order_by_client_id("shared-3") is not None
 
 
+def test_paper_sqlite_reopen_restores_exact_multi_order_state(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker.submit("BTCUSDT", "buy", 2, 100, client_order_id="restart-1")
+    broker.submit("BTCUSDT", "buy", 1, 200, client_order_id="restart-2")
+    broker.submit("BTCUSDT", "sell", 0.5, 150, client_order_id="restart-3")
+    broker.submit("ETHUSDT", "buy", 3, 50, client_order_id="restart-4")
+    expected_positions = broker.positions()
+    expected_ids = [order.id for order in broker.orders]
+
+    broker.close()
+    restored = PaperBroker(str(path))
+
+    assert restored.positions() == expected_positions
+    assert [order.id for order in restored.orders] == expected_ids
+    assert restored.reconcile().valid
+    for client_id in ("restart-1", "restart-2", "restart-3", "restart-4"):
+        assert restored.order_by_client_id(client_id) is not None
+
+
+def test_paper_sqlite_restore_rejects_non_finite_numeric_data(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker._connection.execute(
+        "INSERT INTO paper_orders "
+        "(id, symbol, side, quantity, price, client_order_id, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("nan", "BTCUSDT", "buy", float("nan"), 100, None, "FILLED"),
+    )
+    broker._connection.commit()
+
+    with pytest.raises(ValueError, match="invalid order data"):
+        PaperBroker(str(path))
+
+
 def test_paper_reconciliation_matches_filled_order_ledger():
     broker = PaperBroker()
     broker.submit("BTCUSDT", "buy", 2, 100)
