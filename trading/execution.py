@@ -8,6 +8,7 @@ from .binance_preflight import BinancePreflightReport
 from .config import settings
 from .kill_switch import KillSwitch
 from .paper import PaperBroker, PaperOrder
+from .paper_repository import open_paper_ledger_repository
 from .risk import RiskContext, RiskLimits, RiskRejected, validate_order
 
 
@@ -28,7 +29,15 @@ class ExecutionEngine:
         live_preflight: BinancePreflightReport | None = None,
     ) -> None:
         self.limits = limits or RiskLimits()
-        self.paper = PaperBroker(settings.paper_store_path or None)
+        self.paper = PaperBroker(
+            repository=open_paper_ledger_repository(
+                backend=settings.paper_store_backend,
+                path=settings.paper_store_path,
+                dsn=settings.paper_store_dsn,
+            )
+            if settings.paper_trading and (settings.paper_store_path or settings.paper_store_dsn)
+            else None
+        )
         self.kill_switch = kill_switch or KillSwitch()
         self.live_preflight = live_preflight
 
