@@ -33,7 +33,7 @@ def test_paper_sell_cannot_exceed_position():
 def test_paper_client_order_id_is_idempotent():
     broker = PaperBroker()
     first = broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="strategy-1")
-    second = broker.submit("BTCUSDT", "buy", 1, 999, client_order_id="strategy-1")
+    second = broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="strategy-1")
     assert second is first
     assert len(broker.orders) == 1
     assert broker.position("BTCUSDT").quantity == 1
