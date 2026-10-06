@@ -50,6 +50,8 @@ class ExecutionEngine:
         account_equity: float | None = None,
         stop_loss_price: float | None = None,
         market_prices: dict[str, float] | None = None,
+        signal_score: float | None = None,
+        reward_risk_ratio: float | None = None,
     ) -> PaperOrder:
         """Route adapter market data through filters/risk into Paper only.
 
@@ -90,6 +92,8 @@ class ExecutionEngine:
             account_equity=account_equity,
             stop_loss_price=stop_loss_price,
             market_prices=prices or None,
+            signal_score=signal_score,
+            reward_risk_ratio=reward_risk_ratio,
         )
 
     def submit(
@@ -101,6 +105,8 @@ class ExecutionEngine:
         account_equity: float | None = None,
         stop_loss_price: float | None = None,
         market_prices: dict[str, float] | None = None,
+        signal_score: float | None = None,
+        reward_risk_ratio: float | None = None,
     ) -> PaperOrder:
         """Validate hard safety gates before any order is created.
 
@@ -165,6 +171,7 @@ class ExecutionEngine:
                 open_exposure=exposure.gross_notional,
                 estimated_slippage_bps=context.estimated_slippage_bps,
                 correlation_exposure=context.correlation_exposure,
+                open_positions=len(self.paper.positions()),
                 emergency_stop=context.emergency_stop,
             )
         exposure_delta = notional if normalized_side == "buy" else -notional
@@ -173,11 +180,15 @@ class ExecutionEngine:
             self.limits,
             risk_context,
             account_equity=account_equity,
+            signal_score=signal_score,
+            reward_risk_ratio=reward_risk_ratio,
             entry_price=final_price,
+            
             stop_loss_price=stop_loss_price,
             quantity=final_quantity,
             side=normalized_side,
             exposure_delta=exposure_delta,
+            strict=True,
         )
         if settings.live_trading:
             raise RuntimeError("live execution is not implemented in this foundation")
