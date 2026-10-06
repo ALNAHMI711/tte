@@ -31,7 +31,7 @@ def test_execution_routes_exchange_normalized_values() -> None:
     engine = ExecutionEngine()
     captured: dict[str, float] = {}
 
-    def capture(symbol: str, side: str, quantity: float, price: float):
+    def capture(symbol: str, side: str, quantity: float, price: float, client_order_id=None):
         captured.update(symbol=symbol, side=side, quantity=quantity, price=price)
         return type("Order", (), {"status": "FILLED", "id": "paper-captured"})()
 
@@ -132,3 +132,15 @@ def test_execution_accepts_order_within_half_percent_risk_budget():
         stop_loss_price=950,
     )
     assert order.status == "FILLED"
+
+
+def test_execution_preserves_client_order_id_for_idempotent_paper_submission():
+    engine = ExecutionEngine()
+    request = OrderRequest("BTC/USDT", "buy", 0.01, 1000, client_order_id="client-001")
+
+    first = engine.submit(request, RiskContext())
+    second = engine.submit(request, RiskContext())
+
+    assert second is first
+    assert len(engine.paper.orders) == 1
+    assert engine.paper.position("BTC/USDT").quantity == 0.01
