@@ -70,6 +70,7 @@ def test_runner_uses_exit_signal_for_existing_position():
         RiskContext(),
         quantity=0.02,
         price=900,
+        market_prices={"BTCUSDT": 900},
     )
     assert result.action == "exit_long"
     assert result.order is not None
