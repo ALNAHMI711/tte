@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from trading.paper import PaperBroker
@@ -113,3 +115,47 @@ def test_paper_sqlite_ledger_rejects_non_filled_status(tmp_path):
 
     with pytest.raises(ValueError, match="unsupported order status"):
         PaperBroker(str(path))
+
+
+def test_paper_sqlite_submit_is_atomic_on_insert_failure(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="atomic-1")
+
+    original_execute = broker._connection.execute
+
+    def fail_insert(sql, *args):
+        if sql.startswith("INSERT INTO paper_orders"):
+            raise sqlite3.OperationalError("injected insert failure")
+        return original_execute(sql, *args)
+
+    broker._connection.execute = fail_insert
+
+    with pytest.raises(sqlite3.OperationalError, match="injected insert failure"):
+        broker.submit("BTCUSDT", "buy", 2, 200, client_order_id="atomic-2")
+
+    assert len(broker.orders) == 1
+    assert broker.order_by_client_id("atomic-2") is None
+    assert broker.position("BTCUSDT").quantity == 1
+
+    restored = PaperBroker(str(path))
+    assert len(restored.orders) == 1
+    assert restored.order_by_client_id("atomic-2") is None
+    assert restored.position("BTCUSDT").quantity == 1
+
+
+def test_paper_sqlite_second_broker_sees_committed_orders(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    first = PaperBroker(str(path))
+    second = PaperBroker(str(path))
+
+    first.submit("BTCUSDT", "buy", 1, 100, client_order_id="shared-1")
+    order = second.submit("BTCUSDT", "buy", 2, 200, client_order_id="shared-2")
+
+    assert order.client_order_id == "shared-2"
+    assert second.position("BTCUSDT").quantity == 3
+    assert first.position("BTCUSDT").quantity == 1
+
+    first.submit("BTCUSDT", "buy", 3, 300, client_order_id="shared-3")
+    assert second.position("BTCUSDT").quantity == 6
+    assert second.order_by_client_id("shared-3") is not None
