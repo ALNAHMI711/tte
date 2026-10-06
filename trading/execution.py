@@ -144,6 +144,16 @@ class ExecutionEngine:
         if normalized_side not in {"buy", "sell"}:
             raise RiskRejected("side must be buy or sell")
 
+        # Required risk evidence is part of the execution contract, even for
+        # an idempotent client order lookup. Never let a missing hard-gate
+        # input bypass the risk boundary by reusing a client_order_id.
+        if signal_score is None:
+            raise RiskRejected("signal score is required", code="MISSING_SIGNAL_SCORE")
+        if reward_risk_ratio is None:
+            raise RiskRejected("reward-risk ratio is required", code="MISSING_REWARD_RISK")
+        if stop_loss_price is None:
+            raise RiskRejected("stop loss price is required", code="MISSING_PROTECTIVE_INPUTS")
+
         if request.client_order_id:
             existing = self.paper.order_by_client_id(request.client_order_id)
             if existing is not None:
@@ -183,7 +193,6 @@ class ExecutionEngine:
             signal_score=signal_score,
             reward_risk_ratio=reward_risk_ratio,
             entry_price=final_price,
-            
             stop_loss_price=stop_loss_price,
             quantity=final_quantity,
             side=normalized_side,
