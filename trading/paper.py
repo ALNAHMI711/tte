@@ -38,7 +38,7 @@ class PaperBroker:
         self._persistence_path = persistence_path
         self._connection: sqlite3.Connection | None = None
         if persistence_path:
-            self._connection = sqlite3.connect(persistence_path)
+            self._connection = sqlite3.connect(persistence_path, timeout=5.0)
             self._connection.execute(
                 """CREATE TABLE IF NOT EXISTS paper_orders (
                     id TEXT PRIMARY KEY,
@@ -130,14 +130,16 @@ class PaperBroker:
         ).fetchall()
         for row in rows:
             order = PaperOrder(
-                symbol=row[1],
-                side=row[2],
+                symbol=str(row[1]).strip().upper(),
+                side=str(row[2]).strip().lower(),
                 quantity=float(row[3]),
                 price=float(row[4]),
                 client_order_id=row[5],
                 id=row[0],
                 status=row[6],
             )
+            if order.status != "FILLED":
+                raise ValueError("paper ledger contains unsupported order status")
             if (
                 not order.symbol
                 or order.side not in VALID_SIDES
