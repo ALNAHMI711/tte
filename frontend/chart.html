@@ -23,7 +23,7 @@ function connectStream(){
  const generation=streamGeneration,symbol=document.getElementById("symbol").value.trim().toUpperCase(),tf=document.getElementById("timeframe").value;
  const proto=location.protocol==="https:"?"wss":"ws";
  marketSocket=new WebSocket(proto+"://"+location.host+"/market/stream?symbol="+encodeURIComponent(symbol)+"&timeframe="+encodeURIComponent(tf));
- marketSocket.onopen=()=>{reconnectDelay=1000;status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط"};
+ marketSocket.onopen=()=>{reconnectDelay=1000;status.textContent=symbol+" • "+tf+" • Testnet • بث لحظي قراءة فقط";load().catch(()=>{})};
  marketSocket.onmessage=e=>{try{const d=JSON.parse(e.data),c=d.candle;if(!c)return;const i=rows.findIndex(x=>x.time===c.time);if(i>=0)rows[i]=c;else rows.push(c);candles.update(c);if(redrawTimer)return;redrawTimer=requestAnimationFrame(()=>{redrawTimer=0;if(rows.length){if(i>=0&&i===rows.length-1)updateIndicator(INDICATOR_REGISTRY,indicator.value,rows,series);else redraw()}})}catch(_){}};
  marketSocket.onclose=()=>{if(generation!==streamGeneration)return;if(document.visibilityState==="hidden")return;status.textContent="انقطع البث — إعادة المحاولة…";reconnectTimer=setTimeout(()=>{reconnectTimer=0;if(generation===streamGeneration)connectStream()},reconnectDelay);reconnectDelay=Math.min(reconnectDelay*2,30000)};
 }
