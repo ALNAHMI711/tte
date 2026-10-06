@@ -119,7 +119,7 @@ def test_execution_enforces_half_percent_risk_budget_when_stop_is_supplied():
             OrderRequest("BTC/USDT", "buy", 0.01, 1000),
             RiskContext(),
             account_equity=1000,
-            stop_loss_price=900,
+            stop_loss_price=400,
         )
 
 
