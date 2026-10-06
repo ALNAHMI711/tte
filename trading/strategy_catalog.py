@@ -23,6 +23,34 @@ STRATEGY_CATALOG: tuple[StrategyDefinition, ...] = (
 )
 
 
+def build_order_request_from_action(
+    action: StrategyAction,
+    context: StrategyContext,
+    *,
+    quantity: float,
+    price: float,
+    client_order_id: str | None = None,
+) -> OrderRequest | None:
+    """Translate one already-evaluated strategy action; never executes it."""
+    if action is StrategyAction.HOLD:
+        return None
+    if price <= 0:
+        raise ValueError("price must be positive")
+    if action is StrategyAction.ENTER_LONG:
+        if context.has_long_position:
+            return None
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
+        return OrderRequest(context.symbol, "buy", quantity, price, client_order_id)
+    if action is StrategyAction.EXIT_LONG:
+        if not context.has_long_position:
+            return None
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
+        return OrderRequest(context.symbol, "sell", quantity, price, client_order_id)
+    raise ValueError(f"unsupported strategy action: {action}")
+
+
 def build_order_request(
     strategy: RuntimeStrategy,
     context: StrategyContext,
@@ -31,42 +59,11 @@ def build_order_request(
     price: float,
     client_order_id: str | None = None,
 ) -> OrderRequest | None:
-    """Translate a strategy signal into an order request; never executes it.
-
-    EXIT_LONG uses the current position quantity. ENTER_LONG requires an
-    explicit quantity supplied by the risk/orchestration layer.
-    """
-    action = strategy.evaluate(context)
-    if action is StrategyAction.HOLD:
-        return None
-
-    if price <= 0:
-        raise ValueError("price must be positive")
-
-    if action is StrategyAction.ENTER_LONG:
-        if context.has_long_position:
-            return None
-        if quantity <= 0:
-            raise ValueError("quantity must be positive")
-        return OrderRequest(
-            symbol=context.symbol,
-            side="buy",
-            quantity=quantity,
-            price=price,
-            client_order_id=client_order_id,
-        )
-
-    if action is StrategyAction.EXIT_LONG:
-        if not context.has_long_position:
-            return None
-        if quantity <= 0:
-            raise ValueError("quantity must be positive")
-        return OrderRequest(
-            symbol=context.symbol,
-            side="sell",
-            quantity=quantity,
-            price=price,
-            client_order_id=client_order_id,
-        )
-
-    raise ValueError(f"unsupported strategy action: {action}")
+    """Evaluate a strategy once, then translate that action into an order."""
+    return build_order_request_from_action(
+        strategy.evaluate(context),
+        context,
+        quantity=quantity,
+        price=price,
+        client_order_id=client_order_id,
+    )
