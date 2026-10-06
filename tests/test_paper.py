@@ -241,3 +241,25 @@ def test_paper_reconciliation_detects_position_drift():
     result = broker.reconcile(refresh=False)
     assert not result.valid
     assert "positions do not match the filled-order ledger" in result.errors
+
+
+
+def test_paper_sqlite_failed_transaction_preserves_previous_state(tmp_path):
+    path = tmp_path / "paper.sqlite"
+    broker = PaperBroker(str(path))
+    broker.submit("BTCUSDT", "buy", 1, 100, client_order_id="stable")
+
+    broker._connection.execute(
+        "CREATE TRIGGER reject_paper_insert "
+        "BEFORE INSERT ON paper_orders "
+        "BEGIN SELECT RAISE(ABORT, 'forced failure'); END"
+    )
+    broker._connection.commit()
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced failure"):
+        broker.submit("BTCUSDT", "buy", 2, 200, client_order_id="failed")
+
+    assert broker.positions() == (broker.position("BTCUSDT"),)
+    assert broker.position("BTCUSDT").quantity == 1
+    assert broker.order_by_client_id("stable") is not None
+    assert broker.order_by_client_id("failed") is None
