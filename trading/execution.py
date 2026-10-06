@@ -27,7 +27,7 @@ class ExecutionEngine:
         live_preflight: BinancePreflightReport | None = None,
     ) -> None:
         self.limits = limits or RiskLimits()
-        self.paper = PaperBroker()
+        self.paper = PaperBroker(settings.paper_store_path or None)
         self.kill_switch = kill_switch or KillSwitch()
         self.live_preflight = live_preflight
 
