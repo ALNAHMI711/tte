@@ -103,11 +103,42 @@ class PaperBroker:
                 (order.id, order.symbol, order.side, order.quantity, order.price, order.client_order_id, order.status),
             )
             self._connection.commit()
+        if self._connection is not None:
+            self._connection.execute(
+                "INSERT INTO paper_orders (id, symbol, side, quantity, price, client_order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (order.id, order.symbol, order.side, order.quantity, order.price, order.client_order_id, order.status),
+            )
+            self._connection.commit()
         self.orders.append(order)
         if client_order_id:
             self._by_client_id[client_order_id] = order
         self._apply_fill(order)
         return order
+
+    def _restore(self) -> None:
+        assert self._connection is not None
+        rows = self._connection.execute(
+            "SELECT id, symbol, side, quantity, price, client_order_id, status FROM paper_orders ORDER BY rowid"
+        ).fetchall()
+        for row in rows:
+            order = PaperOrder(row[1], row[2], float(row[3]), float(row[4]), row[5], row[0], row[6])
+            if (
+                not order.symbol or order.side not in VALID_SIDES
+                or not math.isfinite(order.quantity) or order.quantity <= 0
+                or not math.isfinite(order.price) or order.price <= 0
+            ):
+                raise ValueError("paper ledger contains invalid order data")
+            if order.client_order_id:
+                if order.client_order_id in self._by_client_id:
+                    raise ValueError("paper ledger contains duplicate client order ids")
+                self._by_client_id[order.client_order_id] = order
+            if order.side == "sell":
+                current = self._positions.get(order.symbol)
+                if current is None or order.quantity > current.quantity:
+                    raise ValueError("paper ledger contains an invalid sell")
+            self.orders.append(order)
+            self._apply_fill(order)
+
 
     def _restore(self) -> None:
         assert self._connection is not None
