@@ -45,15 +45,23 @@ class PaperReconciliation:
 class PaperBroker:
     """Persistent or in-memory paper ledger with deterministic fills."""
 
-    def __init__(\n        self,\n        persistence_path: str | None = None,\n        *,\n        repository: PaperLedgerRepository | None = None,\n    ) -> None:
+    def __init__(
+        self,
+        persistence_path: str | None = None,
+        *,
+        repository: PaperLedgerRepository | None = None,
+    ) -> None:
         self.orders: list[PaperOrder] = []
         self._by_client_id: dict[str, PaperOrder] = {}
         self._positions: dict[str, PaperPosition] = {}
+        if persistence_path and repository is not None:
+            raise ValueError("provide either persistence_path or repository, not both")
         self._persistence_path = persistence_path
-        self._repository: PaperLedgerRepository | None = None
+        self._repository = repository
         self._lock = RLock()
-        if persistence_path:
+        if self._repository is None and persistence_path:
             self._repository = SQLitePaperLedgerRepository.open(persistence_path)
+        if self._repository is not None:
             self._restore()
 
     @property
