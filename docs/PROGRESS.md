@@ -6,7 +6,7 @@
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
 - أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
-- آخر دفعة: ربط مصدر Binance Spot Testnet للبيانات السوقية بمسار Filters → Risk → Paper مع منع LIVE، وإضافة فحوص fail-closed لبيانات الرمز؛ Live ما زال مقفولاً.
+- آخر دفعة: تشديد استعادة Paper Ledger بحيث تُبنى الحالة خارجياً قبل نشرها، مع اختبارات recovery بعد إعادة التشغيل، idempotency، وتلف البيانات؛ Live ما زال مقفولاً.
 
 ## لوحة المتابعة
 | المجال | الحالة |
@@ -19,7 +19,7 @@
 | الاستراتيجيات | 0% |
 | إدارة المخاطر | 25% |
 | التنفيذ | 28% |
-| Paper Trading | 40% |
+| Paper Trading | 48% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
 | الاختبارات | 48% |
