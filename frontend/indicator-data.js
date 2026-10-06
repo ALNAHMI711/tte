@@ -4,3 +4,12 @@ export function latestPoint(rows, values) {
   }
   return null;
 }
+
+export function mergeCandles(existing, incoming, limit = 300) {
+  const byTime = new Map();
+  for (const candle of [...existing, ...incoming]) {
+    if (!candle || !Number.isFinite(Number(candle.time))) continue;
+    byTime.set(Number(candle.time), candle);
+  }
+  return [...byTime.entries()].sort((a,b)=>a[0]-b[0]).slice(-limit).map(([,candle])=>candle);
+}
