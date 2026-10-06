@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Protocol
 
 from .execution import OrderRequest
-from .market import Candle, OrderBookSnapshot
+from .market import BinanceMarketData, Candle, OrderBookSnapshot
 
 
 class TradingEnvironment(str, Enum):
@@ -66,8 +66,6 @@ class WithdrawalPermissionError(AdapterError):
 
 
 class ExchangeAdapter(Protocol):
-    """Provider-neutral contract consumed by market/execution services."""
-
     name: str
     environment: TradingEnvironment
     capabilities: AdapterCapabilities
@@ -82,23 +80,17 @@ class ExchangeAdapter(Protocol):
 
 
 def enforce_safe_account(account: AccountSnapshot) -> None:
-    """Reject accounts that permit withdrawals; trading keys must be trade-only."""
     if account.can_withdraw:
         raise WithdrawalPermissionError("withdrawal permission must be disabled")
 
 
 def enforce_environment(environment: TradingEnvironment, *, allow_live: bool = False) -> None:
-    """Require explicit opt-in before any live environment can be selected."""
     if environment is TradingEnvironment.LIVE and not allow_live:
         raise LiveTradingBlocked("live environment is disabled")
 
 
 class SafeAdapter:
-    """Reusable base for adapters; subclasses provide provider-specific I/O.
-
-    This class intentionally cannot execute live orders unless an explicit
-    application-level gate is passed by the future production execution layer.
-    """
+    """Reusable base for adapters; live routing is always fail-closed."""
 
     def __init__(self, name: str, environment: TradingEnvironment, capabilities: AdapterCapabilities) -> None:
         if not name:
@@ -112,3 +104,59 @@ class SafeAdapter:
         if self.environment is TradingEnvironment.LIVE:
             raise LiveTradingBlocked("live order routing is disabled")
         raise NotImplementedError("adapter order routing is not implemented")
+
+
+class BinanceSpotTestnetAdapter(SafeAdapter):
+    """Provider adapter for public Spot Testnet market data only."""
+
+    def __init__(self, market_data: BinanceMarketData | None = None) -> None:
+        super().__init__(
+            name="binance-spot-testnet",
+            environment=TradingEnvironment.TESTNET,
+            capabilities=AdapterCapabilities(market_data=True, spot=True),
+        )
+        self.market_data = market_data or BinanceMarketData()
+
+    def ping(self) -> bool:
+        try:
+            self.market_data.order_book("BTCUSDT", limit=1)
+        except Exception:
+            return False
+        return True
+
+    def account_snapshot(self) -> AccountSnapshot:
+        return AccountSnapshot(
+            account_id="testnet-public",
+            environment=self.environment,
+            can_trade=False,
+            can_withdraw=False,
+        )
+
+    def symbol_info(self, symbol: str) -> SymbolInfo:
+        raw = self.market_data.exchange_info(symbol)
+        info = SymbolInfo(
+            symbol=raw.symbol,
+            base_asset=raw.base_asset,
+            quote_asset=raw.quote_asset,
+            min_quantity=raw.min_quantity,
+            quantity_step=raw.quantity_step,
+            min_notional=raw.min_notional,
+            price_tick_size=raw.price_tick_size,
+        )
+        info.validate()
+        return info
+
+    def ticker(self, symbol: str) -> tuple[float, float]:
+        book = self.market_data.order_book(symbol, limit=1)
+        if not book.bids or not book.asks:
+            raise AdapterError("order book has no two-sided market")
+        return book.bids[0][0], book.asks[0][0]
+
+    def order_book(self, symbol: str, limit: int = 20) -> OrderBookSnapshot:
+        return self.market_data.order_book(symbol, limit=limit)
+
+    def candles(self, symbol: str, timeframe: str, limit: int = 200) -> tuple[Candle, ...]:
+        return self.market_data.klines(symbol, timeframe, limit=limit)
+
+    def submit_order(self, request: OrderRequest) -> object:
+        raise LiveTradingBlocked("Binance Spot Testnet adapter is read-only in this foundation")
