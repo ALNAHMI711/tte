@@ -17,6 +17,7 @@ def create_session_store(config: Settings = default_settings) -> SessionStore:
             config.session_store_path,
             ttl_seconds=config.session_ttl_seconds,
             step_up_seconds=config.session_step_up_seconds,
+            secret=config.session_secret,
         )
     if config.app_env.strip().lower() in {"production", "prod"}:
         raise ValueError("in-memory sessions are not permitted in production")
