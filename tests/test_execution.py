@@ -188,6 +188,9 @@ def test_execution_allows_sell_when_it_reduces_portfolio_exposure():
         OrderRequest("BTCUSDT", "sell", 0.05, 1000),
         RiskContext(),
         market_prices={"BTCUSDT": 1000},
+        signal_score=SIGNAL_SCORE,
+        reward_risk_ratio=REWARD_RISK,
+        stop_loss_price=STOP_LOSS,
     )
 
     assert order.status == "FILLED"
@@ -202,6 +205,9 @@ def test_execution_requires_market_prices_when_positions_exist():
         engine.submit(
             OrderRequest("ETHUSDT", "buy", 0.01, 1000),
             RiskContext(),
+            signal_score=SIGNAL_SCORE,
+            reward_risk_ratio=REWARD_RISK,
+            stop_loss_price=STOP_LOSS,
         )
 
 
@@ -333,7 +339,7 @@ def test_execution_strict_risk_requires_reward_risk_before_paper_submission():
             stop_loss_price=STOP_LOSS,
             signal_score=SIGNAL_SCORE,
         )
-    assert engine.paper.orders == ()
+    assert engine.paper.orders == []
 
 
 def test_execution_strict_risk_requires_stop_loss_before_paper_submission():
