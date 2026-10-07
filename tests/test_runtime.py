@@ -17,6 +17,7 @@ def test_sqlite_backend_is_selected_from_settings(tmp_path):
     config = Settings(
         session_store_backend="sqlite",
         session_store_path=str(tmp_path / "sessions.sqlite3"),
+        session_secret="test-secret",
     )
     store = create_session_store(config)
     assert isinstance(store, SQLiteSessionStore)
@@ -33,6 +34,7 @@ def test_production_requires_absolute_sqlite_path():
         app_env="production",
         session_store_backend="sqlite",
         session_store_path="data/sessions.sqlite3",
+        session_secret="test-secret",
     )
     with pytest.raises(ValueError, match="absolute path"):
         create_session_store(config)
