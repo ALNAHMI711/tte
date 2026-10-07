@@ -172,7 +172,10 @@ class SQLitePaperLedgerRepository:
         )
 
     def healthcheck(self) -> None:
-        row = self.connection.execute("SELECT 1").fetchone()
+        try:
+            row = self.connection.execute("SELECT 1").fetchone()
+        except sqlite3.ProgrammingError as exc:
+            raise RuntimeError("paper repository is closed") from exc
         if row != (1,):
             raise RuntimeError("paper repository healthcheck failed")
 
