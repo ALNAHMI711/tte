@@ -206,7 +206,7 @@ def test_authentication_events_are_persisted_without_credentials(tmp_path):
     )
     with SQLiteAuditStore(tmp_path / "audit.sqlite3") as store:
         client = TestClient(create_app(auth, audit_store=store), base_url="https://testserver")
-        failed = client.post("/login", json={"user_id": "admin", "password": "wrong password"}, headers={"x-request-id": "login-fail-1"})
+        failed = client.post("/login", json={"user_id": "unknown-user", "password": "wrong password"}, headers={"x-request-id": "login-fail-1"})
         assert failed.status_code == 401
         csrf = client.get("/csrf").json()["csrf_token"]
         ok = client.post("/login", json={"user_id": "admin", "password": PASSWORD}, headers={"x-request-id": "login-ok-1"})
