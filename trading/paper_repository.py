@@ -178,6 +178,8 @@ class SQLitePaperLedgerRepository:
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
+        if self.connection.in_transaction:
+            self.connection.commit()
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             yield
