@@ -210,7 +210,7 @@ def test_paper_sqlite_restore_rejects_non_finite_numeric_data(tmp_path):
         "INSERT INTO paper_orders "
         "(id, symbol, side, quantity, price, client_order_id, status) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        ("nan", "BTCUSDT", "buy", float("nan"), 100, None, "FILLED"),
+        ("nan", "BTCUSDT", "buy", float("inf"), 100, None, "FILLED"),
     )
     broker._connection.commit()
 
