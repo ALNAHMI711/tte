@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from trading.adapters import SymbolInfo
+from trading.adapters import AccountSnapshot, SymbolInfo
 from trading.execution import ExecutionEngine, OrderRequest
 from trading.adapters import TradingEnvironment
 from trading.kill_switch import KillSwitch
@@ -294,7 +294,7 @@ def test_execution_adapter_path_applies_exchange_filters_before_paper():
             adapter,
         )
 
-    assert engine.paper.orders == ()
+    assert engine.paper.orders == []
 
 
 def test_execution_adapter_path_rejects_live_before_adapter_submission():
