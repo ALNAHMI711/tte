@@ -1,6 +1,8 @@
 """SQLite-backed session store shared across application worker processes."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import sqlite3
 import time
 from pathlib import Path
@@ -21,11 +23,14 @@ class SQLiteSessionStore(SessionStore):
         database_path: str | Path,
         ttl_seconds: int = 3600,
         step_up_seconds: int = 300,
+        secret: str | bytes | None = None,
     ) -> None:
         if ttl_seconds <= 0 or step_up_seconds <= 0:
             raise ValueError("session TTLs must be positive")
         self.ttl_seconds = ttl_seconds
         self.step_up_seconds = step_up_seconds
+        self._secret = secret.encode("utf-8") if isinstance(secret, str) else secret
+        self._secret = self._secret or b"tte-session-index"
         self.database_path = str(database_path)
         if self.database_path != ":memory:":
             Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
