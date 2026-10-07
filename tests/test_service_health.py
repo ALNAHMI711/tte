@@ -16,7 +16,7 @@ def test_service_health_registers_paper_store():
     report = build_health_checker(StubEngine()).readiness()
     assert report.status == "ok"
     assert report.to_dict()["checks"] == [
-        {"name": "paper-store", "ok": True, "detail": ""}
+        {"name": "paper-store", "ok": True, "detail": "ok"}
     ]
 
 
