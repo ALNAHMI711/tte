@@ -40,6 +40,7 @@ def test_bootstrapped_authentication_uses_configured_sqlite_sessions(tmp_path):
         app_env="production",
         session_store_backend="sqlite",
         session_store_path=str(tmp_path / "sessions.sqlite3"),
+        session_secret="test-secret",
     )
     app = create_application(
         config,

@@ -34,7 +34,7 @@ def load_credentials_from_environment(
 
 
 def create_application(
-    config: Settings = default_settings,
+    config: Settings | None = None,
     environ: Mapping[str, str] | None = None,
 ):
     """Build the FastAPI control plane from deployment configuration and secrets."""

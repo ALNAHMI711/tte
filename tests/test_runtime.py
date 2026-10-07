@@ -17,14 +17,15 @@ def test_sqlite_backend_is_selected_from_settings(tmp_path):
     config = Settings(
         session_store_backend="sqlite",
         session_store_path=str(tmp_path / "sessions.sqlite3"),
+        session_secret="test-secret",
     )
     store = create_session_store(config)
     assert isinstance(store, SQLiteSessionStore)
 
 
 def test_production_rejects_memory_session_backend():
-    config = Settings(app_env="production", session_store_backend="memory")
-    with pytest.raises(ValueError, match="production requires"):
+    config = Settings(app_env="production", session_store_backend="memory", paper_trading=False)
+    with pytest.raises(ValueError, match="in-memory sessions"):
         create_session_store(config)
 
 
@@ -33,6 +34,7 @@ def test_production_requires_absolute_sqlite_path():
         app_env="production",
         session_store_backend="sqlite",
         session_store_path="data/sessions.sqlite3",
+        session_secret="test-secret",
     )
     with pytest.raises(ValueError, match="absolute path"):
         create_session_store(config)
@@ -43,6 +45,7 @@ def test_authentication_factory_uses_persistent_store_across_instances(tmp_path)
         app_env="production",
         session_store_backend="sqlite",
         session_store_path=str(tmp_path / "sessions.sqlite3"),
+        session_secret="test-secret",
     )
     credentials = {"admin": UserCredential("admin", hash_password("a sufficiently long password"))}
     first = create_authentication_service(credentials, config)

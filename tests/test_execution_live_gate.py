@@ -32,7 +32,7 @@ def test_live_execution_requires_completed_preflight(monkeypatch):
     engine = ExecutionEngine()
 
     with pytest.raises(RuntimeError, match="completed Binance preflight"):
-        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=90, reward_risk_ratio=2.5, stop_loss_price=950)
 
 
 def test_live_execution_rejects_failed_preflight(monkeypatch):
@@ -53,7 +53,7 @@ def test_live_execution_rejects_failed_preflight(monkeypatch):
     engine = ExecutionEngine(live_preflight=failed)
 
     with pytest.raises(RiskRejected, match="failed Binance preflight"):
-        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=90, reward_risk_ratio=2.5, stop_loss_price=950)
 
 
 def test_live_execution_reaches_exchange_adapter_boundary_only_after_passing_preflight(monkeypatch):
@@ -62,4 +62,4 @@ def test_live_execution_reaches_exchange_adapter_boundary_only_after_passing_pre
     engine = ExecutionEngine(live_preflight=passing_preflight())
 
     with pytest.raises(RuntimeError, match="live execution is not implemented"):
-        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext())
+        engine.submit(OrderRequest("BTC/USDT", "buy", 0.01, 1000), RiskContext(), signal_score=90, reward_risk_ratio=2.5, stop_loss_price=950)

@@ -2,11 +2,11 @@
 
 ## الحالة الحالية
 - المرحلة: Core + Security + Health + Market + Paper Execution foundation
-- الفرع: `foundation-v1`
+- الفرع: `feat/paper-atomic-ledger`
 - Live Trading: 🔴 مقفول
 - Paper Trading: 🟢 مفعّل كمسار الاختبار الأول
 - أسرار/API keys: 🔒 تخزين مشفّر قيد البناء؛ لا تُحفظ في Git
-- آخر دفعة: إضافة liveness/readiness آمنة مع اختبارات عدم تسريب تفاصيل الأخطاء
+- آخر دفعة: تشديد استعادة Paper Ledger بحيث تُبنى الحالة خارجياً قبل نشرها، مع اختبارات recovery بعد إعادة التشغيل، idempotency، وتلف البيانات؛ Live ما زال مقفولاً.
 
 ## لوحة المتابعة
 | المجال | الحالة |
@@ -15,14 +15,14 @@
 | الأمان وإدارة الأسرار | 62% |
 | لوحة التحكم RTL | 10% |
 | المحافظ والمنصات | 0% |
-| محرك السوق | 15% |
+| محرك السوق | 22% |
 | الاستراتيجيات | 0% |
 | إدارة المخاطر | 25% |
-| التنفيذ | 20% |
-| Paper Trading | 25% |
+| التنفيذ | 28% |
+| Paper Trading | 48% |
 | AI Decision Layer | 0% |
 | GitHub Strategy Updates | 0% |
-| الاختبارات | 44% |
+| الاختبارات | 48% |
 | التوثيق | 20% |
 
 **التقدم الإجمالي التقريبي: 31%**
@@ -33,6 +33,7 @@
 - `pyproject.toml` لتثبيت الحزمة واكتشاف `trading*` بشكل صريح.
 - Argon2id لتجزئة كلمات المرور مع حد أدنى 12 حرفاً واختبارات تحقق.
 - جلسات opaque عشوائية، انتهاء صلاحية، إلغاء جلسة، وStep-up مؤقت مرتبط بالجلسة.
+- أضيف مخزن جلسات SQLite دائم: يُحفظ فقط HMAC digest للـsession token، مع استعادة بعد إعادة تشغيل، انتهاء/إلغاء، واشتراط سر جلسات عند التخزين الدائم.
 - حماية أولية لمحاولات تسجيل الدخول عبر exponential backoff وقفل مؤقت بعد عدة إخفاقات.
 - نموذج Audit Event غير قابل للتعديل لتسجيل الأحداث الأمنية دون وضع الأسرار داخل السجل.
 - سياسات HTTP: Secure/HttpOnly/SameSite cookies، CSRF tokens عشوائية ومقارنة constant-time، وIP allowlist صريح.
@@ -45,10 +46,10 @@
 لا يتم فتح Live Trading حتى تنجح اختبارات الأمان، المصادقة، الأسرار، البيانات، المخاطر، التنفيذ، Paper Trading، وفحوصات CI بدون أخطاء حرجة، ثم اجتياز فحوص Binance Trusted IP والصلاحيات.
 
 ## الخطوات التالية ذات الأولوية
-1. Audit persistence مع منع تعديل/حذف السجلات الحساسة.
-2. ربط المصادقة والجلسات فعلياً بطبقة HTTP/API.
+1. إكمال طبقة Paper repository/transaction واختبارات recovery/reconciliation، ثم الانتقال لاحقاً إلى PostgreSQL.
+2. ربط مخزن الجلسات الدائم فعلياً بتهيئة HTTP/API والإقلاع، ثم إضافة اختبارات cookie/session persistence متعددة العمليات.
 3. تحويل Secret Store إلى Provider قابل للاستبدال مع persistence آمن وrotation/masking.
-4. بناء عقود Exchange Adapter وMarket Data ثم Binance Testnet.
+4. توسيع عقد Exchange Adapter/Market Data إلى دورة بيانات سوقية كاملة مع اختبارات انقطاع/بيانات غير صالحة.
 5. توسيع Risk Engine إلى حدود المستخدم المطلوبة: 0.5%/صفقة، خسارة يومية/أسبوعية، التعرض، correlation وkill switch.
 6. استراتيجية/Backtest/Paper reconciliation ثم لوحة RTL.
 7. فحوصات أمنية CI مثل dependency audit وsecret scanning وstatic analysis.

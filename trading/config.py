@@ -34,6 +34,9 @@ class Settings:
     session_store_path: str = os.getenv("SESSION_STORE_PATH", "")
     session_ttl_seconds: int = _int("SESSION_TTL_SECONDS", 3600)
     session_step_up_seconds: int = _int("SESSION_STEP_UP_SECONDS", 300)
+    paper_store_backend: str = os.getenv("PAPER_STORE_BACKEND", "sqlite").strip().lower()
+    paper_store_path: str = os.getenv("PAPER_STORE_PATH", "").strip()
+    paper_store_dsn: str = os.getenv("PAPER_STORE_DSN", "").strip()
 
     def validate(self) -> None:
         if self.live_trading and not self.session_secret:
@@ -44,11 +47,29 @@ class Settings:
             raise ValueError("SESSION_STORE_BACKEND must be memory or sqlite")
         if self.session_ttl_seconds <= 0 or self.session_step_up_seconds <= 0:
             raise ValueError("session TTL settings must be positive")
+        if self.app_env.strip().lower() in {"production", "prod"} and self.session_store_backend != "sqlite":
+            raise ValueError("production requires SESSION_STORE_BACKEND=sqlite")
+        if self.session_store_backend == "sqlite":
+            if not self.session_store_path:
+                raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
+            if not self.session_secret:
+                raise ValueError("SESSION_SECRET is required when SESSION_STORE_BACKEND=sqlite")
+        if self.paper_store_backend not in {"sqlite", "postgresql"}:
+            raise ValueError("PAPER_STORE_BACKEND must be sqlite or postgresql")
+        if self.paper_store_backend == "postgresql" and not self.paper_store_dsn:
+            raise ValueError("PAPER_STORE_DSN is required when PAPER_STORE_BACKEND=postgresql")
+        if self.paper_store_backend == "sqlite" and self.paper_store_dsn:
+            raise ValueError("PAPER_STORE_DSN is only valid with PAPER_STORE_BACKEND=postgresql")
+        if self.paper_trading and self.app_env.strip().lower() in {"production", "prod"}:
+            if self.paper_store_backend == "sqlite" and not self.paper_store_path:
+                raise ValueError("production paper trading requires PAPER_STORE_PATH")
+            if self.paper_store_backend == "postgresql" and not self.paper_store_dsn:
+                raise ValueError("production paper trading requires PAPER_STORE_DSN")
+        if self.paper_store_path and not Path(self.paper_store_path).is_absolute() and self.app_env.strip().lower() in {"production", "prod"}:
+            raise ValueError("production PAPER_STORE_PATH must be an absolute path")
         if self.session_store_backend == "sqlite" and not self.session_store_path:
             raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
         if self.app_env.strip().lower() in {"production", "prod"}:
-            if self.session_store_backend != "sqlite":
-                raise ValueError("production requires SESSION_STORE_BACKEND=sqlite")
             if not Path(self.session_store_path).is_absolute():
                 raise ValueError("production SESSION_STORE_PATH must be an absolute path")
 
