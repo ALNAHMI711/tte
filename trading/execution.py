@@ -152,7 +152,7 @@ class ExecutionEngine:
         if reward_risk_ratio is None:
             raise RiskRejected("reward-risk ratio is required", code="MISSING_REWARD_RISK")
         if stop_loss_price is None:
-            raise RiskRejected("stop loss price is required", code="MISSING_PROTECTIVE_INPUTS")
+            raise RiskRejected("protective stop loss price is required", code="MISSING_PROTECTIVE_INPUTS")
 
         if request.client_order_id:
             existing = self.paper.order_by_client_id(request.client_order_id)
