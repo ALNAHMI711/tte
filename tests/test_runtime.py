@@ -24,7 +24,7 @@ def test_sqlite_backend_is_selected_from_settings(tmp_path):
 
 def test_production_rejects_memory_session_backend():
     config = Settings(app_env="production", session_store_backend="memory")
-    with pytest.raises(ValueError, match="production requires"):
+    with pytest.raises(ValueError, match="in-memory sessions"):
         create_session_store(config)
 
 
