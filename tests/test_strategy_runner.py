@@ -30,7 +30,10 @@ def test_runner_routes_long_signal_through_execution():
         RiskContext(),
         quantity=0.01,
         price=1000,
-        client_order_id="runner-001",\n        signal_score=90,\n        reward_risk_ratio=2.5,\n        stop_loss_price=950,
+        client_order_id="runner-001",
+        signal_score=90,
+        reward_risk_ratio=2.5,
+        stop_loss_price=950,
     )
     assert result.action == "enter_long"
     assert result.order is not None
@@ -51,6 +54,8 @@ def test_runner_cannot_bypass_risk_gate():
             price=1000,
             account_equity=1000,
             stop_loss_price=400,
+            signal_score=90,
+            reward_risk_ratio=2.5,
         )
     except RiskRejected as exc:
         assert "risk-per-trade" in str(exc)
@@ -71,6 +76,9 @@ def test_runner_uses_exit_signal_for_existing_position():
         quantity=0.02,
         price=900,
         market_prices={"BTCUSDT": 900},
+        signal_score=90,
+        reward_risk_ratio=2.5,
+        stop_loss_price=850,
     )
     assert result.action == "exit_long"
     assert result.order is not None
@@ -98,6 +106,9 @@ def test_runner_evaluates_strategy_only_once():
         RiskContext(),
         quantity=0.01,
         price=1000,
+        signal_score=90,
+        reward_risk_ratio=2.5,
+        stop_loss_price=950,
     )
 
     assert strategy.calls == 1
