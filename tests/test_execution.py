@@ -279,7 +279,7 @@ def test_execution_adapter_path_fetches_marks_for_existing_positions():
     )
 
     assert order.status == "FILLED"
-    assert engine.paper.position("BTCUSDT").quantity == 0.005
+    assert engine.paper.position("BTCUSDT") is None
     assert ("ticker", "BTCUSDT") in adapter.calls
 
 
@@ -321,7 +321,7 @@ def test_execution_strict_risk_requires_signal_score_before_paper_submission():
             stop_loss_price=STOP_LOSS,
             reward_risk_ratio=REWARD_RISK,
         )
-    assert engine.paper.orders == ()
+    assert engine.paper.orders == []
 
 
 def test_execution_strict_risk_requires_reward_risk_before_paper_submission():
