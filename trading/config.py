@@ -47,6 +47,8 @@ class Settings:
             raise ValueError("SESSION_STORE_BACKEND must be memory or sqlite")
         if self.session_ttl_seconds <= 0 or self.session_step_up_seconds <= 0:
             raise ValueError("session TTL settings must be positive")
+        if self.app_env.strip().lower() in {"production", "prod"} and self.session_store_backend != "sqlite":
+            raise ValueError("production requires SESSION_STORE_BACKEND=sqlite")
         if self.session_store_backend == "sqlite":
             if not self.session_store_path:
                 raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
@@ -68,8 +70,6 @@ class Settings:
         if self.session_store_backend == "sqlite" and not self.session_store_path:
             raise ValueError("SESSION_STORE_PATH is required when SESSION_STORE_BACKEND=sqlite")
         if self.app_env.strip().lower() in {"production", "prod"}:
-            if self.session_store_backend != "sqlite":
-                raise ValueError("production requires SESSION_STORE_BACKEND=sqlite")
             if not Path(self.session_store_path).is_absolute():
                 raise ValueError("production SESSION_STORE_PATH must be an absolute path")
 
