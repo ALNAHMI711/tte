@@ -30,7 +30,7 @@ def test_runner_routes_long_signal_through_execution():
         RiskContext(),
         quantity=0.01,
         price=1000,
-        client_order_id="runner-001",
+        client_order_id="runner-001",\n        signal_score=90,\n        reward_risk_ratio=2.5,\n        stop_loss_price=950,
     )
     assert result.action == "enter_long"
     assert result.order is not None
