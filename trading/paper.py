@@ -59,6 +59,7 @@ class PaperBroker:
         self._persistence_path = persistence_path
         self._repository = repository
         self._lock = RLock()
+        self._closed = False
         if self._repository is None and persistence_path:
             self._repository = SQLitePaperLedgerRepository.open(persistence_path)
         if self._repository is not None:
@@ -67,6 +68,8 @@ class PaperBroker:
     def healthcheck(self) -> None:
         """Verify the configured persistent paper store when one is in use."""
         with self._lock:
+            if self._closed:
+                raise RuntimeError("paper repository is closed")
             if self._repository is not None:
                 try:
                     self._repository.healthcheck()
@@ -302,12 +305,12 @@ class PaperBroker:
             )
             if order.status != "FILLED":
                 raise ValueError("paper ledger contains unsupported order status")
+            if not math.isfinite(order.quantity) or not math.isfinite(order.price):
+                raise ValueError("paper ledger contains invalid numeric data")
             if (
                 not order.symbol
                 or order.side not in VALID_SIDES
-                or not math.isfinite(order.quantity)
                 or order.quantity <= 0
-                or not math.isfinite(order.price)
                 or order.price <= 0
             ):
                 raise ValueError("paper ledger contains invalid order data")
@@ -398,3 +401,4 @@ class PaperBroker:
             if self._repository is not None:
                 self._repository.close()
                 self._repository = None
+            self._closed = True

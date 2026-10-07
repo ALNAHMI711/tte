@@ -40,6 +40,8 @@ class StrategyRunner:
         stop_loss_price: float | None = None,
         symbol_info: object | None = None,
         market_prices: dict[str, float] | None = None,
+        signal_score: float | None = None,
+        reward_risk_ratio: float | None = None,
     ) -> StrategyRunResult:
         action = self.strategy.evaluate(context)
         request = build_order_request_from_action(
@@ -59,5 +61,7 @@ class StrategyRunner:
             account_equity=account_equity,
             stop_loss_price=stop_loss_price,
             market_prices=market_prices,
+            signal_score=signal_score,
+            reward_risk_ratio=reward_risk_ratio,
         )
         return StrategyRunResult(action=action.value, order=order)

@@ -45,6 +45,7 @@ def test_authentication_factory_uses_persistent_store_across_instances(tmp_path)
         app_env="production",
         session_store_backend="sqlite",
         session_store_path=str(tmp_path / "sessions.sqlite3"),
+        session_secret="test-secret",
     )
     credentials = {"admin": UserCredential("admin", hash_password("a sufficiently long password"))}
     first = create_authentication_service(credentials, config)

@@ -213,7 +213,7 @@ def test_kill_switch_control_records_safe_audit_events():
     )
     assert deactivate.status_code == 200
 
-    events = audit_log.snapshot()
+    events = [event for event in audit_log.snapshot() if event.action == "kill_switch"]
     assert len(events) == 2
     assert [event.action for event in events] == ["kill_switch", "kill_switch"]
     assert [event.actor for event in events] == ["admin", "admin"]

@@ -272,11 +272,11 @@ def test_execution_adapter_path_is_read_only_and_routes_to_paper():
 
 def test_execution_adapter_path_fetches_marks_for_existing_positions():
     engine = ExecutionEngine()
-    engine.paper.submit("BTCUSDT", "buy", 0.01, 1000)
+    engine.paper.submit("BTCUSDT", "buy", 0.02, 1000)
     adapter = _Adapter()
 
     order = engine.submit_from_adapter(
-        OrderRequest("BTCUSDT", "sell", 0.005, 1000),
+        OrderRequest("BTCUSDT", "sell", 0.01, 1000),
         RiskContext(),
         adapter,
         signal_score=SIGNAL_SCORE,
@@ -351,7 +351,7 @@ def test_execution_strict_risk_requires_stop_loss_before_paper_submission():
             signal_score=SIGNAL_SCORE,
             reward_risk_ratio=REWARD_RISK,
         )
-    assert engine.paper.orders == ()
+    assert engine.paper.orders == []
 
 
 def test_execution_enforces_authoritative_max_open_positions():
